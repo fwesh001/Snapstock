@@ -31,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -185,42 +186,62 @@ private fun EmptyStateCallout() {
 
 @Composable
 private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
-    Box(contentAlignment = Alignment.Center) {
-        if (showHighlight) {
-            val transition = rememberInfiniteTransition(label = "fabPulse")
-            val radiusScale by transition.animateFloat(
-                initialValue = 1f,
-                targetValue = 1.5f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 1100),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "fabPulseScale"
-            )
-            val alpha by transition.animateFloat(
-                initialValue = 0.35f,
-                targetValue = 0f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 1100),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "fabPulseAlpha"
-            )
+    val highlightColor = MaterialTheme.colorScheme.primary
+    val transition = rememberInfiniteTransition(label = "fabSpotlight")
+    val pulseProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1300),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "fabPulseProgress"
+    )
+    val fabScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (showHighlight) 1.06f else 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 700),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "fabScale"
+    )
 
-            Canvas(
-                modifier = Modifier
-                    .size(88.dp)
-                    .alpha(alpha)
-            ) {
-                drawCircle(
-                    color = MaterialTheme.colorScheme.primary,
-                    radius = (size.minDimension / 2f) * radiusScale
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (showHighlight) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Text(
+                    text = "Start here: Tap Snap",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 )
             }
         }
 
-        FloatingActionButton(onClick = onClick) {
-            Text(text = "Snap", fontWeight = FontWeight.Bold)
+        Box(contentAlignment = Alignment.Center) {
+            if (showHighlight) {
+                val ringTwoProgress = (pulseProgress + 0.5f) % 1f
+                Canvas(modifier = Modifier.size(96.dp)) {
+                    drawCircle(
+                        color = highlightColor.copy(alpha = (1f - pulseProgress) * 0.32f),
+                        radius = (size.minDimension / 2f) * (1f + (pulseProgress * 0.6f))
+                    )
+                    drawCircle(
+                        color = highlightColor.copy(alpha = (1f - ringTwoProgress) * 0.22f),
+                        radius = (size.minDimension / 2f) * (1f + (ringTwoProgress * 0.6f))
+                    )
+                }
+            }
+
+            FloatingActionButton(
+                onClick = onClick,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = fabScale
+                    scaleY = fabScale
+                }
+            ) {
+                Text(text = "Snap", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
