@@ -6,31 +6,47 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -249,13 +265,100 @@ private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(onBackClick: () -> Unit) {
-    PlaceholderScreen(title = "Search", subtitle = "Unified Vision Search will be implemented next.", onBackClick = onBackClick)
+    var query by rememberSaveable { mutableStateOf("") }
+    var scannerActive by rememberSaveable { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(text = "Search") },
+                navigationIcon = {
+                    TextButton(onClick = onBackClick) {
+                        Text(text = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 16.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        label = { Text("Search items") },
+                        placeholder = { Text("Name, brand, or pattern") }
+                    )
+                    TextButton(onClick = { scannerActive = !scannerActive }) {
+                        Text(if (scannerActive) "Stop" else "Camera")
+                    }
+                }
+            }
+
+            item {
+                if (scannerActive) {
+                    ScannerPreviewPlaceholder()
+                } else {
+                    SearchEmptyState()
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(onBackClick: () -> Unit) {
-    PlaceholderScreen(title = "Settings", subtitle = "Personalization, Performance, and Safety Zone tabs coming next.", onBackClick = onBackClick)
+    val tabs = listOf("Personalization", "Performance", "Safety Zone")
+    var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(text = "Settings") },
+                navigationIcon = {
+                    TextButton(onClick = onBackClick) {
+                        Text(text = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                tabs.forEachIndexed { index, title ->
+                    Tab(
+                        selected = selectedTabIndex == index,
+                        onClick = { selectedTabIndex = index },
+                        text = { Text(title) }
+                    )
+                }
+            }
+
+            when (selectedTabIndex) {
+                0 -> PersonalizationTab()
+                1 -> PerformanceTab()
+                else -> SafetyZoneTab()
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -290,6 +393,203 @@ private fun PlaceholderScreen(title: String, subtitle: String, onBackClick: () -
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 24.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun ScannerPreviewPlaceholder() {
+    val transition = rememberInfiniteTransition(label = "laserScan")
+    val laserColor = MaterialTheme.colorScheme.primary
+    val lineProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "laserLineProgress"
+    )
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .padding(12.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val y = size.height * lineProgress
+                drawLine(
+                    color = laserColor,
+                    start = androidx.compose.ui.geometry.Offset(0f, y),
+                    end = androidx.compose.ui.geometry.Offset(size.width, y),
+                    strokeWidth = 5f
+                )
+            }
+            Text(
+                text = "Laser scan active...",
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp),
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchEmptyState() {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "That pattern is a mystery!",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Use Camera to scan an item, or type name/brand to search.",
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+private fun PersonalizationTab() {
+    var shopName by rememberSaveable { mutableStateOf("SnapStock") }
+    val currencies = listOf("USD", "MXN", "EUR")
+    val categories = listOf("Shirts", "Pants", "Denim", "Outerwear")
+    var currencyExpanded by remember { mutableStateOf(false) }
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var selectedCurrency by rememberSaveable { mutableStateOf(currencies.first()) }
+    var selectedCategory by rememberSaveable { mutableStateOf(categories.first()) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        OutlinedTextField(
+            value = shopName,
+            onValueChange = { shopName = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Shop Name") },
+            singleLine = true
+        )
+
+        Box {
+            OutlinedButton(onClick = { currencyExpanded = true }) {
+                Text("Currency: $selectedCurrency")
+            }
+            DropdownMenu(expanded = currencyExpanded, onDismissRequest = { currencyExpanded = false }) {
+                currencies.forEach { currency ->
+                    DropdownMenuItem(
+                        text = { Text(currency) },
+                        onClick = {
+                            selectedCurrency = currency
+                            currencyExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        Box {
+            OutlinedButton(onClick = { categoryExpanded = true }) {
+                Text("Default Category: $selectedCategory")
+            }
+            DropdownMenu(expanded = categoryExpanded, onDismissRequest = { categoryExpanded = false }) {
+                categories.forEach { category ->
+                    DropdownMenuItem(
+                        text = { Text(category) },
+                        onClick = {
+                            selectedCategory = category
+                            categoryExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PerformanceTab() {
+    var hapticEnabled by rememberSaveable { mutableStateOf(true) }
+    var highOcrSensitivity by rememberSaveable { mutableStateOf(false) }
+    var autoSaveBatches by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SettingToggleRow("Haptic Feedback", hapticEnabled) { hapticEnabled = it }
+        SettingToggleRow("OCR Sensitivity (High)", highOcrSensitivity) { highOcrSensitivity = it }
+        SettingToggleRow("Auto-Save Batches", autoSaveBatches) { autoSaveBatches = it }
+    }
+}
+
+@Composable
+private fun SafetyZoneTab() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        ) {
+            Text(
+                text = "Safety Zone",
+                modifier = Modifier.padding(12.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+
+        OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+            Text("Image Compression")
+        }
+        OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+            Text("Database Cleanup")
+        }
+        Button(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+            Text("Factory Reset")
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Destructive tools are intentionally separated here.",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun SettingToggleRow(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = title)
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
         }
     }
 }
