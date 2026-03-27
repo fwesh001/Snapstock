@@ -3,7 +3,6 @@ package com.example.snapstock.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -19,7 +18,6 @@ import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,11 +64,9 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -717,19 +713,6 @@ private fun BatchDraftEditorCard(
     onQuantityChange: (String) -> Unit,
     onCategoryChange: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val thumbnail = remember(draft.imagePath) {
-        if (draft.imagePath.isNotEmpty()) {
-            try {
-                BitmapFactory.decodeFile(draft.imagePath)
-            } catch (_: Exception) {
-                null
-            }
-        } else {
-            null
-        }
-    }
-
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -738,19 +721,6 @@ private fun BatchDraftEditorCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(text = "Item #${draft.localId}", style = MaterialTheme.typography.labelLarge)
-
-            if (thumbnail != null) {
-                Image(
-                    bitmap = thumbnail.asImageBitmap(),
-                    contentDescription = "Captured item photo",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            }
-
             OutlinedTextField(
                 value = draft.name,
                 onValueChange = onNameChange,
