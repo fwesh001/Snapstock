@@ -32,7 +32,7 @@ object OcrExtractor {
                         val trimmed = line.trim()
                         if (trimmed.isNotEmpty()) {
                             // Look for price-like patterns: $ or numbers with decimals
-                            if (trimmed.contains(Regex("[\\$£€]|\\d+\\.\\d+|\\d+\\s*(?:USD|MXN|EUR)")) && extractedPrice == null) {
+                            if (trimmed.contains(Regex("[$£€]|\\d+\\.\\d+|\\d+\\s*(?:USD|MXN|EUR)")) && extractedPrice == null) {
                                 extractedPrice = trimmed
                             } else if (extractedName == null && trimmed.length > 2 && trimmed.length < 80) {
                                 // Assume first reasonably-sized line is the name
@@ -41,13 +41,19 @@ object OcrExtractor {
                         }
                     }
 
-                    continuation.resume(OcrResult(extractedName, extractedPrice))
+                    if (continuation.isActive) {
+                        continuation.resume(OcrResult(extractedName, extractedPrice))
+                    }
                 }
                 .addOnFailureListener { _ ->
-                    continuation.resume(OcrResult())
+                    if (continuation.isActive) {
+                        continuation.resume(OcrResult())
+                    }
                 }
         } catch (_: Exception) {
-            continuation.resume(OcrResult())
+            if (continuation.isActive) {
+                continuation.resume(OcrResult())
+            }
         }
     }
 }
