@@ -5,7 +5,9 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.snapstock.data.AppDatabase
+import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
+import com.example.snapstock.data.SettingsRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -41,7 +43,9 @@ sealed interface BatchSaveEvent {
 
 class BatchEntryViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = AppDatabase.getDatabase(application).clothingItemDao()
+    private val settingsRepository = SettingsRepository(application)
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private var currentSettings = AppSettings()
 
     private val _uiState = MutableStateFlow(BatchEntryUiState())
     val uiState: StateFlow<BatchEntryUiState> = _uiState.asStateFlow()
@@ -55,6 +59,14 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     val shouldShowFirstScanTutorial: StateFlow<Boolean> = _shouldShowFirstScanTutorial.asStateFlow()
 
     private var nextLocalId: Int = 1
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.settingsFlow.collect { settings ->
+                currentSettings = settings
+            }
+        }
+    }
 
     fun startNewSession() {
         nextLocalId = 1
@@ -73,6 +85,7 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
             imagePath = imagePath,
             name = initialName,
             priceInput = initialPriceInput,
+            category = currentSettings.defaultCategory,
             ocrNameConfident = ocrNameConfident,
             ocrPriceConfident = ocrPriceConfident
         )
