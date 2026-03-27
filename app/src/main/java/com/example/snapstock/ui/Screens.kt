@@ -487,7 +487,9 @@ fun BatchCaptureScreen(
                                         batchEntryViewModel.addCapturedImage(
                                             imagePath = photoFile.absolutePath,
                                             initialName = hints.prefilledName,
-                                            initialPriceInput = hints.prefilledPrice
+                                            initialPriceInput = hints.prefilledPrice,
+                                            ocrNameConfident = hints.nameConfident,
+                                            ocrPriceConfident = hints.priceConfident
                                         )
                                         batchEntryViewModel.markFirstScanTutorialSeen()
 
@@ -735,13 +737,43 @@ private fun BatchDraftEditorCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(text = "Item #${draft.localId}", style = MaterialTheme.typography.labelLarge)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "Item #${draft.localId}", style = MaterialTheme.typography.labelLarge)
+                if (draft.ocrNameConfident || draft.ocrPriceConfident) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                        ),
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(
+                            text = "OCR",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
             OutlinedTextField(
                 value = draft.name,
                 onValueChange = onNameChange,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("Name") }
+                label = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Name")
+                        if (draft.ocrNameConfident) {
+                            Text("✓", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
             )
             OutlinedTextField(
                 value = draft.category,
@@ -756,7 +788,17 @@ private fun BatchDraftEditorCard(
                     onValueChange = onPriceChange,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
-                    label = { Text("Price") }
+                    label = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Price")
+                            if (draft.ocrPriceConfident) {
+                                Text("✓", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                 )
                 OutlinedTextField(
                     value = draft.quantityInput,
@@ -991,16 +1033,23 @@ private fun createBatchImageFile(context: Context): File {
 
 private data class DraftOcrHints(
     val prefilledName: String = "",
-    val prefilledPrice: String = ""
+    val prefilledPrice: String = "",
+    val nameConfident: Boolean = false,
+    val priceConfident: Boolean = false
 )
 
 private suspend fun extractDraftHintsFromImage(imagePath: String): DraftOcrHints = withContext(Dispatchers.Default) {
     val bitmap = BitmapFactory.decodeFile(imagePath) ?: return@withContext DraftOcrHints()
     val ocrResult = OcrExtractor.extractTextFromImage(bitmap)
 
+    val extractedName = ocrResult.extractedName.orEmpty().trim()
+    val normalizedPrice = normalizePriceInput(ocrResult.extractedPrice)
+
     DraftOcrHints(
-        prefilledName = ocrResult.extractedName.orEmpty().trim(),
-        prefilledPrice = normalizePriceInput(ocrResult.extractedPrice)
+        prefilledName = extractedName,
+        prefilledPrice = normalizedPrice,
+        nameConfident = extractedName.isNotBlank(),
+        priceConfident = normalizedPrice.isNotBlank()
     )
 }
 
