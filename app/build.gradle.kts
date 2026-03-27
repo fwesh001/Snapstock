@@ -73,6 +73,9 @@ dependencies {
     // ML Kit
     implementation(libs.mlkit.text.recognition)
 
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
+
     // Lottie
     implementation(libs.lottie.compose)
 
