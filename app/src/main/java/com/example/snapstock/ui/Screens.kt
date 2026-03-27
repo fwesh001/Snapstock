@@ -76,8 +76,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.snapstock.data.AppSettings
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
+import java.util.Currency
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -91,9 +93,11 @@ fun DashboardScreen(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onBatchCaptureClick: () -> Unit,
-    dashboardViewModel: DashboardViewModel = viewModel()
+    dashboardViewModel: DashboardViewModel = viewModel(),
+    settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
+    val settingsState by settingsViewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -130,7 +134,8 @@ fun DashboardScreen(
                 StatsRow(
                     totalItems = uiState.totalItems,
                     lowStockCount = uiState.lowStockCount,
-                    totalInventoryValue = uiState.totalInventoryValue
+                    totalInventoryValue = uiState.totalInventoryValue,
+                    currencyCode = settingsState.currencyCode
                 )
             }
 
@@ -148,8 +153,14 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun StatsRow(totalItems: Int, lowStockCount: Int, totalInventoryValue: Double) {
-    val currencyFormatter = NumberFormat.getCurrencyInstance(Locale.getDefault())
+private fun StatsRow(totalItems: Int, lowStockCount: Int, totalInventoryValue: Double, currencyCode: String) {
+    val currencyFormatter = remember(currencyCode) {
+        NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
+            runCatching {
+                currency = Currency.getInstance(currencyCode)
+            }
+        }
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -354,6 +365,8 @@ fun SearchScreen(onBackClick: () -> Unit) {
 fun SettingsScreen(onBackClick: () -> Unit) {
     val tabs = listOf("Personalization", "Performance", "Safety Zone")
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val settingsState by settingsViewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -383,8 +396,18 @@ fun SettingsScreen(onBackClick: () -> Unit) {
             }
 
             when (selectedTabIndex) {
-                0 -> PersonalizationTab()
-                1 -> PerformanceTab()
+                0 -> PersonalizationTab(
+                    settings = settingsState,
+                    onShopNameChange = settingsViewModel::updateShopName,
+                    onCurrencyChange = settingsViewModel::updateCurrencyCode,
+                    onDefaultCategoryChange = settingsViewModel::updateDefaultCategory
+                )
+                1 -> PerformanceTab(
+                    settings = settingsState,
+                    onHapticFeedbackChange = settingsViewModel::updateHapticFeedbackEnabled,
+                    onOcrSensitivityChange = settingsViewModel::updateHighOcrSensitivity,
+                    onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches
+                )
                 else -> SafetyZoneTab()
             }
         }
@@ -909,14 +932,18 @@ private fun SearchEmptyState() {
 }
 
 @Composable
-private fun PersonalizationTab() {
-    var shopName by rememberSaveable { mutableStateOf("SnapStock") }
+private fun PersonalizationTab(
+    settings: AppSettings,
+    onShopNameChange: (String) -> Unit,
+    onCurrencyChange: (String) -> Unit,
+    onDefaultCategoryChange: (String) -> Unit
+) {
     val currencies = listOf("USD", "MXN", "EUR")
     val categories = listOf("Shirts", "Pants", "Denim", "Outerwear")
     var currencyExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
-    var selectedCurrency by rememberSaveable { mutableStateOf(currencies.first()) }
-    var selectedCategory by rememberSaveable { mutableStateOf(categories.first()) }
+    val selectedCurrency = settings.currencyCode
+    val selectedCategory = settings.defaultCategory
 
     Column(
         modifier = Modifier
@@ -925,8 +952,8 @@ private fun PersonalizationTab() {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         OutlinedTextField(
-            value = shopName,
-            onValueChange = { shopName = it },
+            value = settings.shopName,
+            onValueChange = onShopNameChange,
             modifier = Modifier.fillMaxWidth(),
             label = { Text("Shop Name") },
             singleLine = true
@@ -941,7 +968,7 @@ private fun PersonalizationTab() {
                     DropdownMenuItem(
                         text = { Text(currency) },
                         onClick = {
-                            selectedCurrency = currency
+                            onCurrencyChange(currency)
                             currencyExpanded = false
                         }
                     )
@@ -958,7 +985,7 @@ private fun PersonalizationTab() {
                     DropdownMenuItem(
                         text = { Text(category) },
                         onClick = {
-                            selectedCategory = category
+                            onDefaultCategoryChange(category)
                             categoryExpanded = false
                         }
                     )
@@ -969,10 +996,12 @@ private fun PersonalizationTab() {
 }
 
 @Composable
-private fun PerformanceTab() {
-    var hapticEnabled by rememberSaveable { mutableStateOf(true) }
-    var highOcrSensitivity by rememberSaveable { mutableStateOf(false) }
-    var autoSaveBatches by rememberSaveable { mutableStateOf(false) }
+private fun PerformanceTab(
+    settings: AppSettings,
+    onHapticFeedbackChange: (Boolean) -> Unit,
+    onOcrSensitivityChange: (Boolean) -> Unit,
+    onAutoSaveBatchesChange: (Boolean) -> Unit
+) {
 
     Column(
         modifier = Modifier
@@ -980,9 +1009,9 @@ private fun PerformanceTab() {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        SettingToggleRow("Haptic Feedback", hapticEnabled) { hapticEnabled = it }
-        SettingToggleRow("OCR Sensitivity (High)", highOcrSensitivity) { highOcrSensitivity = it }
-        SettingToggleRow("Auto-Save Batches", autoSaveBatches) { autoSaveBatches = it }
+        SettingToggleRow("Haptic Feedback", settings.hapticFeedbackEnabled, onHapticFeedbackChange)
+        SettingToggleRow("OCR Sensitivity (High)", settings.highOcrSensitivity, onOcrSensitivityChange)
+        SettingToggleRow("Auto-Save Batches", settings.autoSaveBatches, onAutoSaveBatchesChange)
     }
 }
 
