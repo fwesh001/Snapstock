@@ -3,6 +3,7 @@ package com.example.snapstock.ui
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -75,11 +76,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.snapstock.utils.OcrExtractor
 import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -478,8 +482,19 @@ fun BatchCaptureScreen(
                             object : ImageCapture.OnImageSavedCallback {
                                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                                     isCapturing = false
-                                    batchEntryViewModel.addCapturedImage(photoFile.absolutePath)
-                                    batchEntryViewModel.markFirstScanTutorialSeen()
+                                    scope.launch {
+                                        val hints = extractDraftHintsFromImage(photoFile.absolutePath)
+                                        batchEntryViewModel.addCapturedImage(
+                                            imagePath = photoFile.absolutePath,
+                                            initialName = hints.prefilledName,
+                                            initialPriceInput = hints.prefilledPrice
+                                        )
+                                        batchEntryViewModel.markFirstScanTutorialSeen()
+
+                                        if (hints.prefilledName.isNotBlank() || hints.prefilledPrice.isNotBlank()) {
+                                            snackbarHostState.showSnackbar("OCR prefilled draft fields.")
+                                        }
+                                    }
                                 }
 
                                 override fun onError(exception: ImageCaptureException) {
@@ -972,6 +987,27 @@ private fun createBatchImageFile(context: Context): File {
         imageDir.mkdirs()
     }
     return File(imageDir, "snap_${System.currentTimeMillis()}.jpg")
+}
+
+private data class DraftOcrHints(
+    val prefilledName: String = "",
+    val prefilledPrice: String = ""
+)
+
+private suspend fun extractDraftHintsFromImage(imagePath: String): DraftOcrHints = withContext(Dispatchers.Default) {
+    val bitmap = BitmapFactory.decodeFile(imagePath) ?: return@withContext DraftOcrHints()
+    val ocrResult = OcrExtractor.extractTextFromImage(bitmap)
+
+    DraftOcrHints(
+        prefilledName = ocrResult.extractedName.orEmpty().trim(),
+        prefilledPrice = normalizePriceInput(ocrResult.extractedPrice)
+    )
+}
+
+private fun normalizePriceInput(rawPrice: String?): String {
+    if (rawPrice.isNullOrBlank()) return ""
+    val match = Regex("""\d+(?:[.,]\d{1,2})?""").find(rawPrice) ?: return ""
+    return match.value.replace(',', '.')
 }
 
 @Composable
