@@ -2,10 +2,12 @@ package com.example.snapstock.ui
 
 import android.app.Application
 import android.content.Context
+import android.graphics.BitmapFactory
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.snapstock.data.AppDatabase
 import com.example.snapstock.data.ClothingItem
+import com.example.snapstock.utils.OcrExtractor
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -26,7 +28,8 @@ data class BatchDraft(
 
 data class BatchEntryUiState(
     val drafts: List<BatchDraft> = emptyList(),
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    val enableOcrPrefill: Boolean = true
 ) {
     val captureCount: Int
         get() = drafts.size
@@ -104,38 +107,64 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         val now = System.currentTimeMillis()
         val entities = mutableListOf<ClothingItem>()
 
-        for (draft in state.drafts) {
-            val name = draft.name.trim()
-            val price = draft.priceInput.toDoubleOrNull()
-            val quantity = draft.quantityInput.toIntOrNull()
-
-            if (name.isBlank()) {
-                viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Every item needs a name.")) }
-                return
-            }
-            if (price == null || price <= 0.0) {
-                viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Every item needs a valid price.")) }
-                return
-            }
-            if (quantity == null || quantity <= 0) {
-                viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Every item needs a valid quantity.")) }
-                return
-            }
-
-            entities += ClothingItem(
-                name = name,
-                price = price,
-                quantity = quantity,
-                category = draft.category,
-                imagePath = draft.imagePath,
-                patternHash = null,
-                dateAdded = now
-            )
-        }
-
         _uiState.update { it.copy(isSaving = true) }
 
         viewModelScope.launch {
+            for (draft in state.drafts) {
+                var name = draft.name.trim()
+                var price = draft.priceInput
+
+                // Auto-prefill empty fields via OCR if enabled
+                if (state.enableOcrPrefill && draft.imagePath.isNotEmpty()) {
+                    if (name.isBlank() || price.isBlank()) {
+                        try {
+                            val bitmap = BitmapFactory.decodeFile(draft.imagePath)
+                            if (bitmap != null) {
+                                val ocrResult = OcrExtractor.extractTextFromImage(bitmap)
+                                if (name.isBlank() && ocrResult.extractedName != null) {
+                                    name = ocrResult.extractedName
+                                }
+                                if (price.isBlank() && ocrResult.extractedPrice != null) {
+                                    price = ocrResult.extractedPrice
+                                }
+                            }
+                        } catch (_: Exception) {
+                            // OCR failed, continue with current values
+                        }
+                    }
+                }
+
+                val nameVal = name.trim()
+                val priceVal = price.toDoubleOrNull()
+                val quantity = draft.quantityInput.toIntOrNull()
+
+                if (nameVal.isBlank()) {
+                    _uiState.update { it.copy(isSaving = false) }
+                    _events.emit(BatchSaveEvent.Error("Every item needs a name."))
+                    return@launch
+                }
+                if (priceVal == null || priceVal <= 0.0) {
+                    _uiState.update { it.copy(isSaving = false) }
+                    _events.emit(BatchSaveEvent.Error("Every item needs a valid price."))
+                    return@launch
+                }
+                if (quantity == null || quantity <= 0) {
+                    _uiState.update { it.copy(isSaving = false) }
+                    _events.emit(BatchSaveEvent.Error("Every item needs a valid quantity."))
+                    return@launch
+                }
+
+                entities += ClothingItem(
+                    name = nameVal,
+                    price = priceVal,
+                    quantity = quantity,
+                    category = draft.category,
+                    imagePath = draft.imagePath,
+                    patternHash = null,
+                    dateAdded = now
+                )
+            }
+
             try {
                 dao.insertItems(entities)
                 nextLocalId = 1
