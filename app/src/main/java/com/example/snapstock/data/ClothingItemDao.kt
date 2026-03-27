@@ -27,6 +27,16 @@ interface ClothingItemDao {
     @Query("SELECT * FROM clothing_items WHERE quantity <= 5 ORDER BY quantity ASC")
     fun getLowStockItems(): Flow<List<ClothingItem>>
 
+    @Query(
+        """
+        SELECT * FROM clothing_items
+        WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
+           OR category LIKE '%' || :query || '%' COLLATE NOCASE
+        ORDER BY dateAdded DESC
+        """
+    )
+    fun searchItems(query: String): Flow<List<ClothingItem>>
+
     @Query("SELECT * FROM clothing_items WHERE id = :itemId")
     suspend fun getItemById(itemId: Int): ClothingItem?
 }
