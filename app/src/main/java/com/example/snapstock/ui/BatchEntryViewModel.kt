@@ -21,7 +21,9 @@ data class BatchDraft(
     val name: String = "",
     val priceInput: String = "",
     val quantityInput: String = "1",
-    val category: String = "Shirts"
+    val category: String = "Shirts",
+    val ocrNameConfident: Boolean = false,
+    val ocrPriceConfident: Boolean = false
 )
 
 data class BatchEntryUiState(
@@ -62,13 +64,17 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     fun addCapturedImage(
         imagePath: String,
         initialName: String = "",
-        initialPriceInput: String = ""
+        initialPriceInput: String = "",
+        ocrNameConfident: Boolean = false,
+        ocrPriceConfident: Boolean = false
     ) {
         val draft = BatchDraft(
             localId = nextLocalId++,
             imagePath = imagePath,
             name = initialName,
-            priceInput = initialPriceInput
+            priceInput = initialPriceInput,
+            ocrNameConfident = ocrNameConfident,
+            ocrPriceConfident = ocrPriceConfident
         )
         _uiState.update { state ->
             state.copy(drafts = state.drafts + draft)
