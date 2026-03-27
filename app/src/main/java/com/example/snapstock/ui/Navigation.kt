@@ -6,4 +6,5 @@ sealed class Route(val route: String) {
     object Search : Route("search")
     object Settings : Route("settings")
     object BatchCapture : Route("batch_capture")
+    object BatchEntry : Route("batch_entry")
 }

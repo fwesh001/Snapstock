@@ -4,9 +4,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.snapstock.ui.BatchEntryScreen
+import com.example.snapstock.ui.BatchEntryViewModel
 import com.example.snapstock.ui.BatchCaptureScreen
 import com.example.snapstock.ui.DashboardScreen
 import com.example.snapstock.ui.Route
@@ -22,6 +25,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             SnapStockTheme {
                 val navController = rememberNavController()
+                val batchEntryViewModel: BatchEntryViewModel = viewModel()
                 NavHost(navController = navController, startDestination = Route.Splash.route) {
                     composable(Route.Splash.route) {
                         SplashScreenContent(
@@ -47,7 +51,23 @@ class MainActivity : ComponentActivity() {
                         SettingsScreen(onBackClick = { navController.popBackStack() })
                     }
                     composable(Route.BatchCapture.route) {
-                        BatchCaptureScreen(onBackClick = { navController.popBackStack() })
+                        BatchCaptureScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onDoneClick = { navController.navigate(Route.BatchEntry.route) },
+                            batchEntryViewModel = batchEntryViewModel
+                        )
+                    }
+                    composable(Route.BatchEntry.route) {
+                        BatchEntryScreen(
+                            onBackClick = { navController.popBackStack() },
+                            onSaveComplete = {
+                                navController.navigate(Route.Dashboard.route) {
+                                    popUpTo(Route.Dashboard.route) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                            },
+                            batchEntryViewModel = batchEntryViewModel
+                        )
                     }
                 }
             }
