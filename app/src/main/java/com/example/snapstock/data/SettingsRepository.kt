@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 private const val SETTINGS_DATASTORE_NAME = "app_settings"
+private const val DEFAULT_SHOP_NAME = "SnapStock"
+private const val DEFAULT_CURRENCY = "USD"
+private const val DEFAULT_CATEGORY = "Shirts"
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
     name = SETTINGS_DATASTORE_NAME
@@ -86,9 +89,6 @@ class SettingsRepository(private val context: Context) {
     }
 
     companion object {
-        private const val DEFAULT_SHOP_NAME = "SnapStock"
-        private const val DEFAULT_CURRENCY = "USD"
-        private const val DEFAULT_CATEGORY = "Shirts"
 
         private val KEY_SHOP_NAME = stringPreferencesKey("shop_name")
         private val KEY_CURRENCY = stringPreferencesKey("currency")
