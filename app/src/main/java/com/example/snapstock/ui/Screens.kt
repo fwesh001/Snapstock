@@ -1,10 +1,21 @@
 package com.example.snapstock.ui
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.view.CameraController
+import androidx.camera.view.LifecycleCameraController
+import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +30,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,28 +44,42 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.io.File
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -363,8 +389,368 @@ fun SettingsScreen(onBackClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BatchCaptureScreen(onBackClick: () -> Unit) {
-    PlaceholderScreen(title = "Batch Capture", subtitle = "CameraX rapid capture flow will be implemented next.", onBackClick = onBackClick)
+fun BatchCaptureScreen(
+    onBackClick: () -> Unit,
+    onDoneClick: () -> Unit,
+    batchEntryViewModel: BatchEntryViewModel
+) {
+    val uiState by batchEntryViewModel.uiState.collectAsState()
+    val shouldShowTutorial by batchEntryViewModel.shouldShowFirstScanTutorial.collectAsState()
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var isCapturing by rememberSaveable { mutableStateOf(false) }
+
+    val cameraController = remember(context) {
+        LifecycleCameraController(context).apply {
+            cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            setEnabledUseCases(CameraController.IMAGE_CAPTURE)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (!granted) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Camera permission is required to capture inventory.")
+            }
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        batchEntryViewModel.startNewSession()
+    }
+
+    LaunchedEffect(hasCameraPermission, lifecycleOwner) {
+        if (hasCameraPermission) {
+            cameraController.bindToLifecycle(lifecycleOwner)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(text = "Batch Capture") },
+                navigationIcon = {
+                    TextButton(onClick = onBackClick) {
+                        Text(text = "Back")
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        if (!hasCameraPermission || isCapturing) {
+                            if (!hasCameraPermission) {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                            return@OutlinedButton
+                        }
+
+                        val photoFile = createBatchImageFile(context)
+                        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                        isCapturing = true
+                        cameraController.takePicture(
+                            outputOptions,
+                            ContextCompat.getMainExecutor(context),
+                            object : ImageCapture.OnImageSavedCallback {
+                                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                    isCapturing = false
+                                    batchEntryViewModel.addCapturedImage(photoFile.absolutePath)
+                                    batchEntryViewModel.markFirstScanTutorialSeen()
+                                }
+
+                                override fun onError(exception: ImageCaptureException) {
+                                    isCapturing = false
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "Capture failed. Please try again."
+                                        )
+                                    }
+                                }
+                            }
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (isCapturing) "Capturing..." else "Capture")
+                }
+                Button(
+                    onClick = onDoneClick,
+                    enabled = uiState.captureCount > 0,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Done")
+                }
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .padding(12.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    if (hasCameraPermission) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                PreviewView(ctx).apply {
+                                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                                    controller = cameraController
+                                }
+                            }
+                        )
+                    } else {
+                        Text(
+                            text = "Camera permission required",
+                            modifier = Modifier.align(Alignment.Center),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+
+                    if (shouldShowTutorial) {
+                        FirstScanTutorialOverlay()
+                    }
+                }
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "${uiState.captureCount} items captured",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(text = "Tap Capture repeatedly, then Done to enter batch details.")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirstScanTutorialOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f))
+    ) {
+        Canvas(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(0.78f)
+                .height(170.dp)
+        ) {
+            drawRoundRect(
+                color = MaterialTheme.colorScheme.onPrimary,
+                cornerRadius = CornerRadius(28f, 28f),
+                style = Stroke(
+                    width = 6f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 14f), 0f)
+                )
+            )
+        }
+
+        Text(
+            text = "Keep the item and the price tag in frame.",
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(20.dp),
+            color = MaterialTheme.colorScheme.onPrimary,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BatchEntryScreen(
+    onBackClick: () -> Unit,
+    onSaveComplete: () -> Unit,
+    batchEntryViewModel: BatchEntryViewModel
+) {
+    val uiState by batchEntryViewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showConfettiPlaceholder by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        batchEntryViewModel.events.collect { event ->
+            when (event) {
+                is BatchSaveEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                is BatchSaveEvent.Success -> {
+                    showConfettiPlaceholder = true
+                    snackbarHostState.showSnackbar("Saved ${event.savedCount} items.")
+                    delay(450)
+                    showConfettiPlaceholder = false
+                    onSaveComplete()
+                }
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(text = "Batch Entry") },
+                navigationIcon = {
+                    TextButton(onClick = onBackClick) {
+                        Text(text = "Back")
+                    }
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        bottomBar = {
+            Button(
+                onClick = { batchEntryViewModel.saveBatch() },
+                enabled = uiState.drafts.isNotEmpty() && !uiState.isSaving,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+            ) {
+                Text(if (uiState.isSaving) "Saving..." else "Save Batch")
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 16.dp)
+        ) {
+            if (showConfettiPlaceholder) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    ) {
+                        Text(
+                            text = "Confetti: Batch saved!",
+                            modifier = Modifier.padding(16.dp),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+
+            if (uiState.drafts.isEmpty()) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "No captured items yet. Go back and tap Capture first.",
+                            modifier = Modifier.padding(16.dp),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        text = "${uiState.drafts.size} items to complete",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                items(uiState.drafts, key = { it.localId }) { draft ->
+                    BatchDraftEditorCard(
+                        draft = draft,
+                        onNameChange = { batchEntryViewModel.updateDraft(localId = draft.localId, name = it) },
+                        onPriceChange = { batchEntryViewModel.updateDraft(localId = draft.localId, priceInput = it) },
+                        onQuantityChange = { batchEntryViewModel.updateDraft(localId = draft.localId, quantityInput = it) },
+                        onCategoryChange = { batchEntryViewModel.updateDraft(localId = draft.localId, category = it) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatchDraftEditorCard(
+    draft: BatchDraft,
+    onNameChange: (String) -> Unit,
+    onPriceChange: (String) -> Unit,
+    onQuantityChange: (String) -> Unit,
+    onCategoryChange: (String) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text = "Item #${draft.localId}", style = MaterialTheme.typography.labelLarge)
+            OutlinedTextField(
+                value = draft.name,
+                onValueChange = onNameChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Name") }
+            )
+            OutlinedTextField(
+                value = draft.category,
+                onValueChange = onCategoryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Category") }
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = draft.priceInput,
+                    onValueChange = onPriceChange,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("Price") }
+                )
+                OutlinedTextField(
+                    value = draft.quantityInput,
+                    onValueChange = onQuantityChange,
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    label = { Text("Qty") }
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -576,6 +962,14 @@ private fun SafetyZoneTab() {
             style = MaterialTheme.typography.bodySmall
         )
     }
+}
+
+private fun createBatchImageFile(context: Context): File {
+    val imageDir = File(context.filesDir, "batch_images")
+    if (!imageDir.exists()) {
+        imageDir.mkdirs()
+    }
+    return File(imageDir, "snap_${System.currentTimeMillis()}.jpg")
 }
 
 @Composable
