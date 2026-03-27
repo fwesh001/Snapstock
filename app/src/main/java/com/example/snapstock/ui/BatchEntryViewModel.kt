@@ -59,8 +59,17 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         _uiState.value = BatchEntryUiState()
     }
 
-    fun addCapturedImage(imagePath: String) {
-        val draft = BatchDraft(localId = nextLocalId++, imagePath = imagePath)
+    fun addCapturedImage(
+        imagePath: String,
+        initialName: String = "",
+        initialPriceInput: String = ""
+    ) {
+        val draft = BatchDraft(
+            localId = nextLocalId++,
+            imagePath = imagePath,
+            name = initialName,
+            priceInput = initialPriceInput
+        )
         _uiState.update { state ->
             state.copy(drafts = state.drafts + draft)
         }
