@@ -215,48 +215,62 @@ private fun LastActionCard(uiState: DashboardUiState, currencyCode: String) {
         }
     }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(text = "Last Action", style = MaterialTheme.typography.labelLarge)
-            val lastItem = uiState.lastAddedItem
-            if (lastItem == null) {
-                Text(text = "No items yet. Your first Snap will appear here.")
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    ItemImageThumbnail(
-                        imagePath = lastItem.imagePath,
-                        modifier = Modifier
-                            .size(92.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                    )
+    val lastItem = uiState.lastAddedItem
+    if (lastItem != null) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 320.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "Last Action", style = MaterialTheme.typography.labelLarge)
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = lastItem.name.uppercase(Locale.getDefault()),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = currencyFormatter.format(lastItem.price),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                ItemImageThumbnail(
+                    imagePath = lastItem.imagePath,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+
+                Text(
+                    text = lastItem.name.uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = currencyFormatter.format(lastItem.price),
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    } else {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "Last Action", style = MaterialTheme.typography.labelLarge)
+                Text(text = "No items yet. Your first Snap will appear here.")
             }
         }
     }
