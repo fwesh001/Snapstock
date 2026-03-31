@@ -112,22 +112,52 @@ fun DashboardScreen(
 ) {
     val uiState by dashboardViewModel.uiState.collectAsState()
     val settingsState by settingsViewModel.uiState.collectAsState()
+    var selectedNavItem by rememberSaveable { mutableStateOf(0) }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = "SnapStock", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    TextButton(onClick = onSettingsClick) {
-                        Text(text = "Settings")
-                    }
-                },
+                navigationIcon = {},
                 actions = {
                     TextButton(onClick = onSearchClick) {
-                        Text(text = "Search")
+                        Icon(
+                            imageVector = Icons.Filled.Search,
+                            contentDescription = "Search",
+                            modifier = Modifier.size(24.dp)
+                        )
                     }
                 }
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+                    label = { Text("Home") },
+                    selected = selectedNavItem == 0,
+                    onClick = {
+                        selectedNavItem = 0
+                    }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.GridView, contentDescription = "Collection") },
+                    label = { Text("Collection") },
+                    selected = selectedNavItem == 1,
+                    onClick = {
+                        selectedNavItem = 1
+                    }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
+                    label = { Text("Settings") },
+                    selected = selectedNavItem == 2,
+                    onClick = {
+                        selectedNavItem = 2
+                        onSettingsClick()
+                    }
+                )
+            }
         },
         floatingActionButton = {
             HighlightedFab(
