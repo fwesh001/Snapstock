@@ -144,7 +144,10 @@ fun DashboardScreen(
             }
 
             item {
-                LastActionCard(uiState = uiState)
+                LastActionCard(
+                    uiState = uiState,
+                    currencyCode = settingsState.currencyCode
+                )
             }
 
             if (uiState.isEmpty) {
@@ -199,23 +202,41 @@ private fun StatCard(modifier: Modifier, title: String, value: String) {
 }
 
 @Composable
-private fun LastActionCard(uiState: DashboardUiState) {
+private fun LastActionCard(uiState: DashboardUiState, currencyCode: String) {
+    val currencyFormatter = remember(currencyCode) {
+        NumberFormat.getCurrencyInstance(Locale.getDefault()).apply {
+            runCatching {
+                currency = Currency.getInstance(currencyCode)
+            }
+        }
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(text = "Last Action", style = MaterialTheme.typography.labelLarge)
-            if (uiState.lastAddedItem == null) {
+            val lastItem = uiState.lastAddedItem
+            if (lastItem == null) {
                 Text(text = "No items yet. Your first Snap will appear here.")
             } else {
+                ItemImageThumbnail(
+                    imagePath = lastItem.imagePath,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp)
+                )
                 Text(
-                    text = "Added ${uiState.lastAddedItem.name}",
+                    text = lastItem.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                Text(text = "Category: ${uiState.lastAddedItem.category}")
-                Text(text = "Quantity: ${uiState.lastAddedItem.quantity}")
+                Text(
+                    text = currencyFormatter.format(lastItem.price),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
     }
