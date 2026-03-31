@@ -115,6 +115,10 @@ fun DashboardScreen(
     val settingsState by settingsViewModel.uiState.collectAsState()
     var selectedNavItem by rememberSaveable { mutableStateOf(0) }
 
+    LaunchedEffect(Unit) {
+        selectedNavItem = 0
+    }
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
