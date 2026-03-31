@@ -219,7 +219,7 @@ private fun LastActionCard(uiState: DashboardUiState, currencyCode: String) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(text = "Last Action", style = MaterialTheme.typography.labelLarge)
             val lastItem = uiState.lastAddedItem
             if (lastItem == null) {
@@ -228,7 +228,7 @@ private fun LastActionCard(uiState: DashboardUiState, currencyCode: String) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     ItemImageThumbnail(
                         imagePath = lastItem.imagePath,
@@ -238,8 +238,10 @@ private fun LastActionCard(uiState: DashboardUiState, currencyCode: String) {
                     )
 
                     Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(top = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
                             text = lastItem.name.uppercase(Locale.getDefault()),
