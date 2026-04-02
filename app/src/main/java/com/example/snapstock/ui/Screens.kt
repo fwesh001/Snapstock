@@ -34,9 +34,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
@@ -50,6 +52,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -539,7 +542,6 @@ fun SettingsScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatchCaptureScreen(
-    onBackClick: () -> Unit,
     onDoneClick: () -> Unit,
     batchEntryViewModel: BatchEntryViewModel
 ) {
@@ -592,30 +594,83 @@ fun BatchCaptureScreen(
     }
 
     Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(text = "Batch Capture") },
-                navigationIcon = {
-                    TextButton(onClick = onBackClick) {
-                        Text(text = "Back")
-                    }
-                }
-            )
-        },
         bottomBar = {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedButton(
+                IconButton(
+                    onClick = onDoneClick,
+                    enabled = uiState.captureCount > 0,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (uiState.captureCount > 0) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Done",
+                        tint = if (uiState.captureCount > 0) {
+                            MaterialTheme.colorScheme.onPrimary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+            }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (hasCameraPermission) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            PreviewView(ctx).apply {
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                                controller = cameraController
+                            }
+                        }
+                    )
+                } else {
+                    Text(
+                        text = "Camera permission required",
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                if (shouldShowTutorial) {
+                    FirstScanTutorialOverlay()
+                }
+
+                FloatingActionButton(
                     onClick = {
                         if (!hasCameraPermission || isCapturing) {
                             if (!hasCameraPermission) {
                                 cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                             }
-                            return@OutlinedButton
+                            return@FloatingActionButton
                         }
 
                         val photoFile = createBatchImageFile(context)
@@ -655,69 +710,17 @@ fun BatchCaptureScreen(
                             }
                         )
                     },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(if (isCapturing) "Capturing..." else "Capture")
-                }
-                Button(
-                    onClick = onDoneClick,
-                    enabled = uiState.captureCount > 0,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text("Done")
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(280.dp)
-                        .padding(12.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 18.dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
-                    if (hasCameraPermission) {
-                        AndroidView(
-                            modifier = Modifier.fillMaxSize(),
-                            factory = { ctx ->
-                                PreviewView(ctx).apply {
-                                    scaleType = PreviewView.ScaleType.FILL_CENTER
-                                    controller = cameraController
-                                }
-                            }
-                        )
-                    } else {
-                        Text(
-                            text = "Camera permission required",
-                            modifier = Modifier.align(Alignment.Center),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-
-                    if (shouldShowTutorial) {
-                        FirstScanTutorialOverlay()
-                    }
-                }
-            }
-
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "${uiState.captureCount} items captured",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                    Icon(
+                        imageVector = Icons.Filled.PhotoCamera,
+                        contentDescription = if (isCapturing) "Capturing" else "Capture"
                     )
-                    Text(text = "Tap Capture repeatedly, then Done to enter batch details.")
                 }
             }
         }
