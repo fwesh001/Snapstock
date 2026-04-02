@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -136,33 +137,15 @@ fun DashboardScreen(
             )
         },
         bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
-                    label = { Text("Home") },
-                    selected = selectedNavItem == 0,
-                    onClick = {
-                        selectedNavItem = 0
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.GridView, contentDescription = "Collection") },
-                    label = { Text("Collection") },
-                    selected = selectedNavItem == 1,
-                    onClick = {
-                        selectedNavItem = 1
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
-                    label = { Text("Settings") },
-                    selected = selectedNavItem == 2,
-                    onClick = {
-                        selectedNavItem = 2
-                        onSettingsClick()
-                    }
-                )
-            }
+            AppBottomNavigationBar(
+                selectedNavItem = selectedNavItem,
+                onHomeClick = { selectedNavItem = 0 },
+                onCollectionClick = { selectedNavItem = 1 },
+                onSettingsClick = {
+                    selectedNavItem = 2
+                    onSettingsClick()
+                }
+            )
         },
         floatingActionButton = {
             HighlightedFab(
@@ -313,7 +296,7 @@ private fun LastActionCard(uiState: DashboardUiState, currencyCode: String) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(text = "Last Action", style = MaterialTheme.typography.labelLarge)
-                Text(text = "No items yet. Your first Snap will appear here.")
+                Text(text = "No items yet. Your first capture will appear here.")
             }
         }
     }
@@ -335,7 +318,7 @@ private fun EmptyStateCallout() {
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "Tap the highlighted Snap button to capture your first item.",
+                text = "Tap the highlighted camera button to capture your first item.",
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
@@ -370,7 +353,7 @@ private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
         if (showHighlight) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
                 Text(
-                    text = "Start here: Tap Snap",
+                    text = "Start here: Tap Camera",
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                 )
@@ -399,7 +382,10 @@ private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
                     scaleY = fabScale
                 }
             ) {
-                Text(text = "Snap", fontWeight = FontWeight.Bold)
+                Icon(
+                    imageVector = Icons.Filled.PhotoCamera,
+                    contentDescription = "Camera"
+                )
             }
         }
     }
@@ -407,7 +393,11 @@ private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchScreen(onBackClick: () -> Unit) {
+fun SearchScreen(
+    onHomeClick: () -> Unit,
+    onCollectionClick: () -> Unit,
+    onSettingsClick: () -> Unit
+) {
     val searchViewModel: SearchViewModel = viewModel()
     val uiState by searchViewModel.uiState.collectAsState()
     var scannerActive by rememberSaveable { mutableStateOf(false) }
@@ -415,12 +405,15 @@ fun SearchScreen(onBackClick: () -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "Search") },
-                navigationIcon = {
-                    TextButton(onClick = onBackClick) {
-                        Text(text = "Back")
-                    }
-                }
+                title = { Text(text = "Search") }
+            )
+        },
+        bottomBar = {
+            AppBottomNavigationBar(
+                selectedNavItem = 0,
+                onHomeClick = onHomeClick,
+                onCollectionClick = onCollectionClick,
+                onSettingsClick = onSettingsClick
             )
         }
     ) { innerPadding ->
@@ -485,7 +478,11 @@ fun SearchScreen(onBackClick: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBackClick: () -> Unit) {
+fun SettingsScreen(
+    onHomeClick: () -> Unit,
+    onCollectionClick: () -> Unit,
+    onSettingsClick: () -> Unit
+) {
     val tabs = listOf("Personalization", "Performance", "Safety Zone")
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     val settingsViewModel: SettingsViewModel = viewModel()
@@ -494,12 +491,15 @@ fun SettingsScreen(onBackClick: () -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(text = "Settings") },
-                navigationIcon = {
-                    TextButton(onClick = onBackClick) {
-                        Text(text = "Back")
-                    }
-                }
+                title = { Text(text = "Settings") }
+            )
+        },
+        bottomBar = {
+            AppBottomNavigationBar(
+                selectedNavItem = 2,
+                onHomeClick = onHomeClick,
+                onCollectionClick = onCollectionClick,
+                onSettingsClick = onSettingsClick
             )
         }
     ) { innerPadding ->
@@ -1265,6 +1265,35 @@ private fun SafetyZoneTab() {
         Text(
             text = "Destructive tools are intentionally separated here.",
             style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun AppBottomNavigationBar(
+    selectedNavItem: Int,
+    onHomeClick: () -> Unit,
+    onCollectionClick: () -> Unit,
+    onSettingsClick: () -> Unit
+) {
+    NavigationBar {
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Home, contentDescription = "Home") },
+            label = { Text("Home") },
+            selected = selectedNavItem == 0,
+            onClick = onHomeClick
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.GridView, contentDescription = "Collection") },
+            label = { Text("Collection") },
+            selected = selectedNavItem == 1,
+            onClick = onCollectionClick
+        )
+        NavigationBarItem(
+            icon = { Icon(Icons.Filled.Settings, contentDescription = "Settings") },
+            label = { Text("Settings") },
+            selected = selectedNavItem == 2,
+            onClick = onSettingsClick
         )
     }
 }
