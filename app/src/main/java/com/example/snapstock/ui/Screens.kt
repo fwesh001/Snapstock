@@ -21,6 +21,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,12 +37,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
@@ -86,6 +89,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -562,7 +566,7 @@ fun BatchCaptureScreen(
         )
     }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
-    var previewImagePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var previewImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
 
     val cameraController = remember(context) {
         LifecycleCameraController(context).apply {
@@ -611,12 +615,12 @@ fun BatchCaptureScreen(
                     modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(uiState.drafts, key = { it.localId }) { draft ->
+                    itemsIndexed(uiState.drafts, key = { _, draft -> draft.localId }) { index, draft ->
                         ItemImageThumbnail(
                             imagePath = draft.imagePath,
                             modifier = Modifier
                                 .size(56.dp)
-                                .clickable { previewImagePath = draft.imagePath }
+                                .clickable { previewImageIndex = index }
                         )
                     }
                 }
@@ -766,10 +770,11 @@ fun BatchCaptureScreen(
             }
         }
 
-        previewImagePath?.let { imagePath ->
+        previewImageIndex?.let { index ->
             FullImagePreviewDialog(
-                imagePath = imagePath,
-                onDismiss = { previewImagePath = null }
+                imagePaths = uiState.drafts.map { it.imagePath },
+                initialIndex = index,
+                onDismiss = { previewImageIndex = null }
             )
         }
     }
@@ -1199,7 +1204,17 @@ private fun ItemImageThumbnail(imagePath: String, modifier: Modifier) {
 }
 
 @Composable
-private fun FullImagePreviewDialog(imagePath: String, onDismiss: () -> Unit) {
+private fun FullImagePreviewDialog(imagePaths: List<String>, initialIndex: Int, onDismiss: () -> Unit) {
+    if (imagePaths.isEmpty()) {
+        onDismiss()
+        return
+    }
+
+    var selectedIndex by remember(imagePaths, initialIndex) {
+        mutableStateOf(initialIndex.coerceIn(0, imagePaths.lastIndex))
+    }
+    var totalDragX by remember { mutableStateOf(0f) }
+
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
@@ -1209,11 +1224,48 @@ private fun FullImagePreviewDialog(imagePath: String, onDismiss: () -> Unit) {
                 .padding(12.dp)
         ) {
             ItemImageThumbnail(
-                imagePath = imagePath,
+                imagePath = imagePaths[selectedIndex],
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 520.dp)
+                    .pointerInput(selectedIndex, imagePaths.size) {
+                        detectHorizontalDragGestures(
+                            onHorizontalDrag = { _, dragAmount ->
+                                totalDragX += dragAmount
+                            },
+                            onDragEnd = {
+                                when {
+                                    totalDragX <= -90f && selectedIndex < imagePaths.lastIndex -> {
+                                        selectedIndex += 1
+                                    }
+
+                                    totalDragX >= 90f && selectedIndex > 0 -> {
+                                        selectedIndex -= 1
+                                    }
+                                }
+                                totalDragX = 0f
+                            },
+                            onDragCancel = {
+                                totalDragX = 0f
+                            }
+                        )
+                    }
             )
+
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .background(
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                        shape = CircleShape
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Close preview"
+                )
+            }
         }
     }
 }
