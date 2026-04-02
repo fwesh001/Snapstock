@@ -33,11 +33,13 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
@@ -599,14 +601,26 @@ fun BatchCaptureScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                LazyRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.drafts, key = { it.localId }) { draft ->
+                        ItemImageThumbnail(
+                            imagePath = draft.imagePath,
+                            modifier = Modifier.size(56.dp)
+                        )
+                    }
+                }
+
                 IconButton(
                     onClick = onDoneClick,
                     enabled = uiState.captureCount > 0,
                     modifier = Modifier
-                        .size(56.dp)
+                        .size(64.dp)
                         .clip(CircleShape)
                         .background(
                             if (uiState.captureCount > 0) {
@@ -619,6 +633,7 @@ fun BatchCaptureScreen(
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = "Done",
+                        modifier = Modifier.size(32.dp),
                         tint = if (uiState.captureCount > 0) {
                             MaterialTheme.colorScheme.onPrimary
                         } else {
@@ -664,63 +679,84 @@ fun BatchCaptureScreen(
                     FirstScanTutorialOverlay()
                 }
 
-                FloatingActionButton(
-                    onClick = {
-                        if (!hasCameraPermission || isCapturing) {
-                            if (!hasCameraPermission) {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 16.dp)
+                ) {
+                    FloatingActionButton(
+                        onClick = {
+                            if (!hasCameraPermission || isCapturing) {
+                                if (!hasCameraPermission) {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                                return@FloatingActionButton
                             }
-                            return@FloatingActionButton
-                        }
 
-                        val photoFile = createBatchImageFile(context)
-                        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                        isCapturing = true
-                        cameraController.takePicture(
-                            outputOptions,
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageSavedCallback {
-                                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                    isCapturing = false
-                                    scope.launch {
-                                        val hints = extractDraftHintsFromImage(photoFile.absolutePath)
-                                        batchEntryViewModel.addCapturedImage(
-                                            imagePath = photoFile.absolutePath,
-                                            initialName = hints.prefilledName,
-                                            initialPriceInput = hints.prefilledPrice,
-                                            ocrNameConfident = hints.nameConfident,
-                                            ocrPriceConfident = hints.priceConfident
-                                        )
-                                        batchEntryViewModel.markFirstScanTutorialSeen()
+                            val photoFile = createBatchImageFile(context)
+                            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                            isCapturing = true
+                            cameraController.takePicture(
+                                outputOptions,
+                                ContextCompat.getMainExecutor(context),
+                                object : ImageCapture.OnImageSavedCallback {
+                                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                        isCapturing = false
+                                        scope.launch {
+                                            val hints = extractDraftHintsFromImage(photoFile.absolutePath)
+                                            batchEntryViewModel.addCapturedImage(
+                                                imagePath = photoFile.absolutePath,
+                                                initialName = hints.prefilledName,
+                                                initialPriceInput = hints.prefilledPrice,
+                                                ocrNameConfident = hints.nameConfident,
+                                                ocrPriceConfident = hints.priceConfident
+                                            )
+                                            batchEntryViewModel.markFirstScanTutorialSeen()
 
-                                        if (hints.prefilledName.isNotBlank() || hints.prefilledPrice.isNotBlank()) {
-                                            snackbarHostState.showSnackbar("OCR prefilled draft fields.")
+                                            if (hints.prefilledName.isNotBlank() || hints.prefilledPrice.isNotBlank()) {
+                                                snackbarHostState.showSnackbar("OCR prefilled draft fields.")
+                                            }
+                                        }
+                                    }
+
+                                    override fun onError(exception: ImageCaptureException) {
+                                        isCapturing = false
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                "Capture failed. Please try again."
+                                            )
                                         }
                                     }
                                 }
-
-                                override fun onError(exception: ImageCaptureException) {
-                                    isCapturing = false
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            "Capture failed. Please try again."
-                                        )
-                                    }
-                                }
-                            }
+                            )
+                        },
+                        modifier = Modifier.size(84.dp),
+                        shape = CircleShape,
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = if (isCapturing) "Capturing" else "Capture",
+                            modifier = Modifier.size(40.dp)
                         )
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 18.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.PhotoCamera,
-                        contentDescription = if (isCapturing) "Capturing" else "Capture"
-                    )
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 2.dp, end = 2.dp),
+                        shape = CircleShape,
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text(
+                            text = uiState.captureCount.toString(),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSecondary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
@@ -796,8 +832,8 @@ fun BatchEntryScreen(
             CenterAlignedTopAppBar(
                 title = { Text(text = "Batch Entry") },
                 navigationIcon = {
-                    TextButton(onClick = onBackClick) {
-                        Text(text = "Back")
+                    IconButton(onClick = onBackClick) {
+                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -970,8 +1006,8 @@ private fun PlaceholderScreen(title: String, subtitle: String, onBackClick: () -
             CenterAlignedTopAppBar(
                 title = { Text(text = title) },
                 navigationIcon = {
-                    TextButton(onClick = onBackClick) {
-                        Text(text = "Back")
+                    IconButton(onClick = onBackClick) {
+                        Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
