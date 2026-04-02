@@ -72,7 +72,6 @@ fun AppNavHost(navController: NavHostController) {
         }
         composable(Route.BatchCapture.route) {
             BatchCaptureScreen(
-                onBackClick = { navController.popBackStack() },
                 onDoneClick = { navController.navigate(Route.BatchEntry.route) },
                 batchEntryViewModel = batchEntryViewModel
             )
