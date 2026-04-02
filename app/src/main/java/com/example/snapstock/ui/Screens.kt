@@ -20,6 +20,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -93,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snapstock.data.AppSettings
@@ -560,6 +562,7 @@ fun BatchCaptureScreen(
         )
     }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
+    var previewImagePath by rememberSaveable { mutableStateOf<String?>(null) }
 
     val cameraController = remember(context) {
         LifecycleCameraController(context).apply {
@@ -611,7 +614,9 @@ fun BatchCaptureScreen(
                     items(uiState.drafts, key = { it.localId }) { draft ->
                         ItemImageThumbnail(
                             imagePath = draft.imagePath,
-                            modifier = Modifier.size(56.dp)
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clickable { previewImagePath = draft.imagePath }
                         )
                     }
                 }
@@ -759,6 +764,13 @@ fun BatchCaptureScreen(
                     }
                 }
             }
+        }
+
+        previewImagePath?.let { imagePath ->
+            FullImagePreviewDialog(
+                imagePath = imagePath,
+                onDismiss = { previewImagePath = null }
+            )
         }
     }
 }
@@ -1182,6 +1194,26 @@ private fun ItemImageThumbnail(imagePath: String, modifier: Modifier) {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FullImagePreviewDialog(imagePath: String, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(12.dp)
+        ) {
+            ItemImageThumbnail(
+                imagePath = imagePath,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 520.dp)
+            )
         }
     }
 }
