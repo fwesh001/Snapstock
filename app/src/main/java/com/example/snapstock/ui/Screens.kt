@@ -20,6 +20,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -616,10 +617,25 @@ fun BatchCaptureScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     itemsIndexed(uiState.drafts, key = { _, draft -> draft.localId }) { index, draft ->
+                        val isHighlighted = if (previewImageIndex != null) {
+                            previewImageIndex == index
+                        } else {
+                            index == uiState.drafts.lastIndex
+                        }
+
                         ItemImageThumbnail(
                             imagePath = draft.imagePath,
                             modifier = Modifier
                                 .size(56.dp)
+                                .border(
+                                    width = if (isHighlighted) 1.5.dp else 0.dp,
+                                    color = if (isHighlighted) {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                                    } else {
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0f)
+                                    },
+                                    shape = RoundedCornerShape(12.dp)
+                                )
                                 .clickable { previewImageIndex = index }
                         )
                     }
@@ -774,6 +790,7 @@ fun BatchCaptureScreen(
             FullImagePreviewDialog(
                 imagePaths = uiState.drafts.map { it.imagePath },
                 initialIndex = index,
+                onIndexChange = { previewImageIndex = it },
                 onDismiss = { previewImageIndex = null }
             )
         }
@@ -1204,7 +1221,12 @@ private fun ItemImageThumbnail(imagePath: String, modifier: Modifier) {
 }
 
 @Composable
-private fun FullImagePreviewDialog(imagePaths: List<String>, initialIndex: Int, onDismiss: () -> Unit) {
+private fun FullImagePreviewDialog(
+    imagePaths: List<String>,
+    initialIndex: Int,
+    onIndexChange: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
     if (imagePaths.isEmpty()) {
         onDismiss()
         return
@@ -1228,6 +1250,11 @@ private fun FullImagePreviewDialog(imagePaths: List<String>, initialIndex: Int, 
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 520.dp)
+                    .border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
                     .pointerInput(selectedIndex, imagePaths.size) {
                         detectHorizontalDragGestures(
                             onHorizontalDrag = { _, dragAmount ->
@@ -1237,10 +1264,12 @@ private fun FullImagePreviewDialog(imagePaths: List<String>, initialIndex: Int, 
                                 when {
                                     totalDragX <= -90f && selectedIndex < imagePaths.lastIndex -> {
                                         selectedIndex += 1
+                                        onIndexChange(selectedIndex)
                                     }
 
                                     totalDragX >= 90f && selectedIndex > 0 -> {
                                         selectedIndex -= 1
+                                        onIndexChange(selectedIndex)
                                     }
                                 }
                                 totalDragX = 0f
