@@ -709,13 +709,13 @@ fun BatchCaptureScreen(
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 16.dp)
                 ) {
-                    FloatingActionButton(
+                    IconButton(
                         onClick = {
                             if (!hasCameraPermission || isCapturing) {
                                 if (!hasCameraPermission) {
                                     cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                                 }
-                                return@FloatingActionButton
+                                return@IconButton
                             }
 
                             val photoFile = createBatchImageFile(context)
@@ -755,15 +755,13 @@ fun BatchCaptureScreen(
                                 }
                             )
                         },
-                        modifier = Modifier.size(84.dp),
-                        shape = CircleShape,
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        modifier = Modifier.size(84.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PhotoCamera,
                             contentDescription = if (isCapturing) "Capturing" else "Capture",
-                            modifier = Modifier.size(40.dp)
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
 
