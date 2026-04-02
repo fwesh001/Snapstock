@@ -19,6 +19,25 @@ sealed class Route(val route: String) {
 fun AppNavHost(navController: NavHostController) {
     val batchEntryViewModel: BatchEntryViewModel = viewModel()
 
+    val navigateToDashboard = {
+        navController.navigate(Route.Dashboard.route) {
+            launchSingleTop = true
+            popUpTo(Route.Dashboard.route) { inclusive = false }
+        }
+    }
+
+    val navigateToSearch = {
+        navController.navigate(Route.Search.route) {
+            launchSingleTop = true
+        }
+    }
+
+    val navigateToSettings = {
+        navController.navigate(Route.Settings.route) {
+            launchSingleTop = true
+        }
+    }
+
     NavHost(navController = navController, startDestination = Route.Splash.route) {
         composable(Route.Splash.route) {
             SplashScreenContent(
@@ -32,16 +51,24 @@ fun AppNavHost(navController: NavHostController) {
         }
         composable(Route.Dashboard.route) {
             DashboardScreen(
-                onSearchClick = { navController.navigate(Route.Search.route) },
-                onSettingsClick = { navController.navigate(Route.Settings.route) },
+                onSearchClick = navigateToSearch,
+                onSettingsClick = navigateToSettings,
                 onBatchCaptureClick = { navController.navigate(Route.BatchCapture.route) }
             )
         }
         composable(Route.Search.route) {
-            SearchScreen(onBackClick = { navController.popBackStack() })
+            SearchScreen(
+                onHomeClick = navigateToDashboard,
+                onCollectionClick = { },
+                onSettingsClick = navigateToSettings
+            )
         }
         composable(Route.Settings.route) {
-            SettingsScreen(onBackClick = { navController.popBackStack() })
+            SettingsScreen(
+                onHomeClick = navigateToDashboard,
+                onCollectionClick = { },
+                onSettingsClick = { }
+            )
         }
         composable(Route.BatchCapture.route) {
             BatchCaptureScreen(
