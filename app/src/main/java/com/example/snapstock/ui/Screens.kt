@@ -46,6 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
@@ -68,6 +69,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -568,6 +570,7 @@ fun BatchCaptureScreen(
     }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
     var previewImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var isAwaitingUndo by rememberSaveable { mutableStateOf(false) }
 
     val cameraController = remember(context) {
         LifecycleCameraController(context).apply {
@@ -600,6 +603,29 @@ fun BatchCaptureScreen(
     LaunchedEffect(hasCameraPermission, lifecycleOwner) {
         if (hasCameraPermission) {
             cameraController.bindToLifecycle(lifecycleOwner)
+        }
+    }
+
+    fun removeCaptureAt(index: Int) {
+        if (isAwaitingUndo) return
+
+        val nextIndex = batchEntryViewModel.removeDraftAt(index)
+        previewImageIndex = nextIndex
+
+        scope.launch {
+            isAwaitingUndo = true
+            val result = snackbarHostState.showSnackbar(
+                message = "Capture removed",
+                actionLabel = "Undo",
+                withDismissAction = true
+            )
+
+            if (result == SnackbarResult.ActionPerformed) {
+                previewImageIndex = batchEntryViewModel.undoLastRemoval()
+            } else {
+                batchEntryViewModel.commitLastRemoval()
+            }
+            isAwaitingUndo = false
         }
     }
 
@@ -639,6 +665,36 @@ fun BatchCaptureScreen(
                                 .clickable { previewImageIndex = index }
                         )
                     }
+                }
+
+                IconButton(
+                    onClick = {
+                        val targetIndex = previewImageIndex ?: uiState.drafts.lastIndex
+                        if (targetIndex >= 0) {
+                            removeCaptureAt(targetIndex)
+                        }
+                    },
+                    enabled = uiState.captureCount > 0 && !isAwaitingUndo,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (uiState.captureCount > 0 && !isAwaitingUndo) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            }
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Remove capture",
+                        tint = if (uiState.captureCount > 0 && !isAwaitingUndo) {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
                 }
 
                 IconButton(
@@ -755,12 +811,20 @@ fun BatchCaptureScreen(
                                 }
                             )
                         },
-                        modifier = Modifier.size(84.dp)
+                        modifier = Modifier
+                            .size(92.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f),
+                                shape = CircleShape
+                            )
                     ) {
                         Icon(
                             imageVector = Icons.Filled.PhotoCamera,
                             contentDescription = if (isCapturing) "Capturing" else "Capture",
-                            modifier = Modifier.size(48.dp),
+                            modifier = Modifier.size(56.dp),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -789,6 +853,7 @@ fun BatchCaptureScreen(
                 imagePaths = uiState.drafts.map { it.imagePath },
                 initialIndex = index,
                 onIndexChange = { previewImageIndex = it },
+                onRemoveCurrent = { removeCaptureAt(it) },
                 onDismiss = { previewImageIndex = null }
             )
         }
@@ -1223,6 +1288,7 @@ private fun FullImagePreviewDialog(
     imagePaths: List<String>,
     initialIndex: Int,
     onIndexChange: (Int) -> Unit,
+    onRemoveCurrent: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     if (imagePaths.isEmpty()) {
@@ -1279,19 +1345,38 @@ private fun FullImagePreviewDialog(
                     }
             )
 
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .background(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
-                        shape = CircleShape
-                    )
+            Row(
+                modifier = Modifier.align(Alignment.TopEnd),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "Close preview"
-                )
+                IconButton(
+                    onClick = { onRemoveCurrent(selectedIndex) },
+                    modifier = Modifier
+                        .background(
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Remove capture",
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .background(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close preview"
+                    )
+                }
             }
         }
     }
