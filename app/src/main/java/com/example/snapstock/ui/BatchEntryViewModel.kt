@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 
 data class BatchDraft(
     val localId: Int,
@@ -59,6 +60,12 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     val shouldShowFirstScanTutorial: StateFlow<Boolean> = _shouldShowFirstScanTutorial.asStateFlow()
 
     private var nextLocalId: Int = 1
+    private var pendingRemoval: PendingRemoval? = null
+
+    private data class PendingRemoval(
+        val draft: BatchDraft,
+        val index: Int
+    )
 
     init {
         viewModelScope.launch {
@@ -69,6 +76,7 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun startNewSession() {
+        commitLastRemoval()
         nextLocalId = 1
         _uiState.value = BatchEntryUiState()
     }
@@ -100,6 +108,38 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         _shouldShowFirstScanTutorial.value = false
     }
 
+    fun removeDraftAt(index: Int): Int? {
+        val state = _uiState.value
+        if (index !in state.drafts.indices) return null
+
+        commitLastRemoval()
+
+        val drafts = state.drafts.toMutableList()
+        val removedDraft = drafts.removeAt(index)
+        pendingRemoval = PendingRemoval(draft = removedDraft, index = index)
+        _uiState.value = state.copy(drafts = drafts)
+
+        if (drafts.isEmpty()) return null
+        return index.coerceAtMost(drafts.lastIndex)
+    }
+
+    fun undoLastRemoval(): Int? {
+        val pending = pendingRemoval ?: return null
+        val state = _uiState.value
+        val drafts = state.drafts.toMutableList()
+        val insertIndex = pending.index.coerceIn(0, drafts.size)
+        drafts.add(insertIndex, pending.draft)
+        _uiState.value = state.copy(drafts = drafts)
+        pendingRemoval = null
+        return insertIndex
+    }
+
+    fun commitLastRemoval() {
+        val pending = pendingRemoval ?: return
+        runCatching { File(pending.draft.imagePath).delete() }
+        pendingRemoval = null
+    }
+
     fun updateDraft(
         localId: Int,
         name: String? = null,
@@ -123,6 +163,7 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun saveBatch() {
+        commitLastRemoval()
         val state = _uiState.value
         if (state.drafts.isEmpty()) {
             viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Capture at least one item first.")) }
