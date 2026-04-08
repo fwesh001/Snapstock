@@ -205,6 +205,7 @@ fun DashboardScreen(
                 item {
                     TodoReminderCard(
                         todo = uiState.pendingTodos.first(),
+                        items = uiState.items,
                         onContinue = onCollectionClick
                     )
                 }
@@ -359,7 +360,19 @@ private fun EmptyStateCallout() {
 }
 
 @Composable
-private fun TodoReminderCard(todo: com.example.snapstock.data.TodoEntry, onContinue: () -> Unit) {
+private fun TodoReminderCard(
+    todo: com.example.snapstock.data.TodoEntry,
+    items: List<ClothingItem>,
+    onContinue: () -> Unit
+) {
+    val todoItemIds = remember(todo.itemIdsCsv) {
+        todo.itemIdsCsv.split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+    }
+    val todoItems = remember(todoItemIds, items) {
+        todoItemIds.mapNotNull { id -> items.firstOrNull { it.id == id } }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
@@ -373,8 +386,18 @@ private fun TodoReminderCard(todo: com.example.snapstock.data.TodoEntry, onConti
             Text(text = "To Do", style = MaterialTheme.typography.labelLarge)
             Text(text = todo.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text(text = "Tap to continue editing the saved batch.", style = MaterialTheme.typography.bodyMedium)
+            if (todoItems.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(todoItems, key = { it.id }) { item ->
+                        ItemImageThumbnail(
+                            imagePath = item.imagePath,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                }
+            }
             Button(onClick = onContinue) {
-                Text("Open To Do")
+                Text("Continue editing")
             }
         }
     }
@@ -1030,7 +1053,9 @@ fun BatchEntryScreen(
                     Text(
                         text = "${uiState.drafts.size} items to complete",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
                     )
                 }
                 items(uiState.drafts, key = { it.localId }) { draft ->
@@ -1063,7 +1088,7 @@ fun BatchEntryScreen(
                         showSaveChooser = false
                         batchEntryViewModel.saveBatch(createTodo = false)
                     }) {
-                        Text("Save only")
+                        Text("Save")
                     }
                 }
             )
