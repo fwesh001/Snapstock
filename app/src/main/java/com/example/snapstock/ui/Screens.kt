@@ -42,6 +42,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -121,6 +122,7 @@ import kotlinx.coroutines.withContext
 fun DashboardScreen(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onCollectionClick: () -> Unit,
     onBatchCaptureClick: () -> Unit,
     dashboardViewModel: DashboardViewModel = viewModel(),
     settingsViewModel: SettingsViewModel = viewModel()
@@ -153,7 +155,10 @@ fun DashboardScreen(
             AppBottomNavigationBar(
                 selectedNavItem = selectedNavItem,
                 onHomeClick = { selectedNavItem = 0 },
-                onCollectionClick = { selectedNavItem = 1 },
+                onCollectionClick = {
+                    selectedNavItem = 1
+                    onCollectionClick()
+                },
                 onSettingsClick = {
                     selectedNavItem = 2
                     onSettingsClick()
@@ -189,6 +194,15 @@ fun DashboardScreen(
                     uiState = uiState,
                     currencyCode = settingsState.currencyCode
                 )
+            }
+
+            if (uiState.pendingTodos.isNotEmpty()) {
+                item {
+                    TodoReminderCard(
+                        todo = uiState.pendingTodos.first(),
+                        onContinue = onCollectionClick
+                    )
+                }
             }
 
             if (uiState.isEmpty) {
@@ -335,6 +349,28 @@ private fun EmptyStateCallout() {
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center
             )
+        }
+    }
+}
+
+@Composable
+private fun TodoReminderCard(todo: com.example.snapstock.data.TodoEntry, onContinue: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(text = "To Do", style = MaterialTheme.typography.labelLarge)
+            Text(text = todo.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(text = "Tap to continue editing the saved batch.", style = MaterialTheme.typography.bodyMedium)
+            Button(onClick = onContinue) {
+                Text("Open To Do")
+            }
         }
     }
 }
@@ -908,6 +944,7 @@ fun BatchEntryScreen(
     val uiState by batchEntryViewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showConfettiPlaceholder by rememberSaveable { mutableStateOf(false) }
+    var showSaveChooser by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         batchEntryViewModel.events.collect { event ->
@@ -938,7 +975,7 @@ fun BatchEntryScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             Button(
-                onClick = { batchEntryViewModel.saveBatch() },
+                onClick = { showSaveChooser = true },
                 enabled = uiState.drafts.isNotEmpty() && !uiState.isSaving,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -999,6 +1036,146 @@ fun BatchEntryScreen(
                     )
                 }
             }
+        }
+
+        if (showSaveChooser) {
+            AlertDialog(
+                onDismissRequest = { showSaveChooser = false },
+                title = { Text("Save batch") },
+                text = { Text("Save this inventory now, or save it and create a To Do for finishing the details later.") },
+                confirmButton = {
+                    Button(onClick = {
+                        showSaveChooser = false
+                        batchEntryViewModel.saveBatch(createTodo = true)
+                    }) {
+                        Text("Save + To Do")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = {
+                        showSaveChooser = false
+                        batchEntryViewModel.saveBatch(createTodo = false)
+                    }) {
+                        Text("Save only")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CollectionScreen(
+    onHomeClick: () -> Unit,
+    onCollectionClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    collectionViewModel: CollectionViewModel = viewModel()
+) {
+    val items by collectionViewModel.items.collectAsState()
+    var selectedCategory by rememberSaveable { mutableStateOf("All") }
+    val categories = remember(items) { listOf("All") + items.map { it.category }.distinct().sorted() }
+    val filteredItems = remember(items, selectedCategory) {
+        if (selectedCategory == "All") items else items.filter { it.category == selectedCategory }
+    }
+
+    Scaffold(
+        topBar = { CenterAlignedTopAppBar(title = { Text("Collection") }) },
+        bottomBar = {
+            AppBottomNavigationBar(
+                selectedNavItem = 1,
+                onHomeClick = onHomeClick,
+                onCollectionClick = onCollectionClick,
+                onSettingsClick = onSettingsClick
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 16.dp)
+        ) {
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(categories) { category ->
+                        FilterChipLike(label = category, selected = category == selectedCategory, onClick = { selectedCategory = category })
+                    }
+                }
+            }
+
+            if (filteredItems.isEmpty()) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Text("No items in this collection.", modifier = Modifier.padding(16.dp))
+                    }
+                }
+            } else {
+                items(filteredItems.chunked(2)) { rowItems ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        rowItems.forEach { item ->
+                            CollectionGridCard(
+                                item = item,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (rowItems.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterChipLike(label: String, selected: Boolean, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun CollectionGridCard(item: ClothingItem, modifier: Modifier) {
+    val stockColor = when {
+        item.quantity <= 0 -> MaterialTheme.colorScheme.error
+        item.quantity <= 2 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+
+    Card(modifier = modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(8.dp)) {
+            Box {
+                ItemImageThumbnail(
+                    imagePath = item.imagePath,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(stockColor)
+                )
+            }
+            Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(item.category, style = MaterialTheme.typography.labelSmall)
         }
     }
 }
