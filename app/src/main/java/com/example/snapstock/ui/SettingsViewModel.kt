@@ -37,6 +37,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun updateGreenStockThreshold(threshold: Int) {
+        viewModelScope.launch {
+            settingsRepository.updateGreenStockThreshold(threshold)
+        }
+    }
+
+    fun updateAmberStockThreshold(threshold: Int) {
+        viewModelScope.launch {
+            settingsRepository.updateAmberStockThreshold(threshold)
+        }
+    }
+
     fun updateHapticFeedbackEnabled(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateHapticFeedbackEnabled(enabled)
