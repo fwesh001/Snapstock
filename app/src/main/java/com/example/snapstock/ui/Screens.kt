@@ -376,7 +376,7 @@ private fun TodoReminderCard(
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
     ) {
         Column(
             modifier = Modifier
@@ -384,16 +384,21 @@ private fun TodoReminderCard(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(text = "To Do", style = MaterialTheme.typography.labelLarge)
+            Text(
+                text = "To Do",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
             Text(
                 text = "$pendingCount items to complete",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
             )
             Text(
                 text = todo.title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = MaterialTheme.colorScheme.onSecondaryContainer
             )
             if (todoItems.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -405,7 +410,13 @@ private fun TodoReminderCard(
                     }
                 }
             }
-            Button(onClick = onContinue) {
+            Button(
+                onClick = onContinue,
+                colors = CardDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                )
+            ) {
                 Text("Continue editing")
             }
         }
