@@ -176,22 +176,9 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         val entities = mutableListOf<ClothingItem>()
 
         for (draft in state.drafts) {
-            val name = draft.name.trim()
-            val price = draft.priceInput.toDoubleOrNull()
-            val quantity = draft.quantityInput.toIntOrNull()
-
-            if (name.isBlank()) {
-                viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Every item needs a name.")) }
-                return
-            }
-            if (price == null || price <= 0.0) {
-                viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Every item needs a valid price.")) }
-                return
-            }
-            if (quantity == null || quantity <= 0) {
-                viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Every item needs a valid quantity.")) }
-                return
-            }
+            val name = draft.name.trim().ifBlank { "Pending Item ${draft.localId}" }
+            val price = draft.priceInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
+            val quantity = draft.quantityInput.toIntOrNull()?.takeIf { it > 0 } ?: 1
 
             entities += ClothingItem(
                 name = name,
