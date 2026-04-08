@@ -16,6 +16,7 @@ data class DashboardUiState(
     val lowStockCount: Int = 0,
     val totalInventoryValue: Double = 0.0,
     val lastAddedItem: ClothingItem? = null,
+    val items: List<ClothingItem> = emptyList(),
     val pendingTodos: List<TodoEntry> = emptyList(),
     val isEmpty: Boolean = true
 )
@@ -34,6 +35,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             lowStockCount = items.count { it.quantity <= 5 },
             totalInventoryValue = items.sumOf { it.price * it.quantity },
             lastAddedItem = lastAddedItem,
+            items = items,
             pendingTodos = pendingTodos,
             isEmpty = items.isEmpty()
         )
