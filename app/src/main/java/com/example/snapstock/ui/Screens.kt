@@ -1095,7 +1095,7 @@ fun CollectionScreen(
             AppBottomNavigationBar(
                 selectedNavItem = 1,
                 onHomeClick = onHomeClick,
-                onCollectionClick = onCollectionClick,
+                onCollectionClick = { },
                 onSettingsClick = onSettingsClick
             )
         }
