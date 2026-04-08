@@ -4,7 +4,9 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -46,6 +48,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
@@ -89,14 +92,15 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
@@ -109,6 +113,7 @@ import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
+import java.io.FileOutputStream
 import java.util.Currency
 import java.text.NumberFormat
 import java.util.Locale
@@ -1073,11 +1078,16 @@ fun CollectionScreen(
     collectionViewModel: CollectionViewModel = viewModel()
 ) {
     val items by collectionViewModel.items.collectAsState()
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val settingsState by settingsViewModel.uiState.collectAsState()
     var selectedCategory by rememberSaveable { mutableStateOf("All") }
+    var selectedItem by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
+    var isEditing by rememberSaveable { mutableStateOf(false) }
     val categories = remember(items) { listOf("All") + items.map { it.category }.distinct().sorted() }
     val filteredItems = remember(items, selectedCategory) {
         if (selectedCategory == "All") items else items.filter { it.category == selectedCategory }
     }
+    val density = LocalDensity.current
 
     Scaffold(
         topBar = { CenterAlignedTopAppBar(title = { Text("Collection") }) },
@@ -1118,7 +1128,13 @@ fun CollectionScreen(
                         rowItems.forEach { item ->
                             CollectionGridCard(
                                 item = item,
-                                modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        selectedItem = item
+                                        isEditing = false
+                                    },
+                                    greenThreshold = settingsState.greenStockThreshold,
+                                    amberThreshold = settingsState.amberStockThreshold
                             )
                         }
                         if (rowItems.size == 1) {
@@ -1127,6 +1143,31 @@ fun CollectionScreen(
                     }
                 }
             }
+        }
+
+        selectedItem?.let { item ->
+            CollectionDetailDialog(
+                item = item,
+                isEditing = isEditing,
+                onEditToggle = { isEditing = !isEditing },
+                onDismiss = {
+                    selectedItem = null
+                    isEditing = false
+                },
+                onSave = { updatedItem ->
+                    collectionViewModel.updateItem(updatedItem)
+                    selectedItem = updatedItem
+                    isEditing = false
+                },
+                onRetake = { updatedPath ->
+                    selectedItem = item.copy(imagePath = updatedPath)
+                    collectionViewModel.updateItem(item.copy(imagePath = updatedPath))
+                },
+                onGalleryPick = { updatedPath ->
+                    selectedItem = item.copy(imagePath = updatedPath)
+                    collectionViewModel.updateItem(item.copy(imagePath = updatedPath))
+                }
+            )
         }
     }
 }
@@ -1148,14 +1189,20 @@ private fun FilterChipLike(label: String, selected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun CollectionGridCard(item: ClothingItem, modifier: Modifier) {
+private fun CollectionGridCard(
+    item: ClothingItem,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    greenThreshold: Int,
+    amberThreshold: Int
+) {
     val stockColor = when {
-        item.quantity <= 0 -> MaterialTheme.colorScheme.error
-        item.quantity <= 2 -> MaterialTheme.colorScheme.tertiary
+        item.quantity >= greenThreshold -> MaterialTheme.colorScheme.primary
+        item.quantity >= amberThreshold -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
 
-    Card(modifier = modifier) {
+    Card(modifier = modifier, onClick = onClick) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(8.dp)) {
             Box {
                 ItemImageThumbnail(
@@ -1176,6 +1223,97 @@ private fun CollectionGridCard(item: ClothingItem, modifier: Modifier) {
             }
             Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(item.category, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun CollectionDetailDialog(
+    item: ClothingItem,
+    isEditing: Boolean,
+    onEditToggle: () -> Unit,
+    onDismiss: () -> Unit,
+    onSave: (ClothingItem) -> Unit,
+    onRetake: (String) -> Unit,
+    onGalleryPick: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var name by rememberSaveable(item.id) { mutableStateOf(item.name) }
+    var price by rememberSaveable(item.id) { mutableStateOf(item.price.toString()) }
+    var quantity by rememberSaveable(item.id) { mutableStateOf(item.quantity.toString()) }
+    var category by rememberSaveable(item.id) { mutableStateOf(item.category) }
+
+    val retakeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap: Bitmap? ->
+        bitmap?.let { onRetake(saveBitmapToCollectionFile(context, it)) }
+    }
+    val galleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) onGalleryPick(copyUriToCollectionFile(context, uri))
+    }
+
+    val rotation by animateFloatAsState(targetValue = if (isEditing) 180f else 0f, label = "collectionFlip")
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        rotationY = rotation
+                        cameraDistance = 16 * density.density
+                    }
+                    .padding(16.dp)
+            ) {
+                if (rotation < 90f) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        ItemImageThumbnail(
+                            imagePath = item.imagePath,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                        )
+                        Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Category: ${item.category}")
+                        Text("Qty: ${item.quantity}   Price: ${item.price}")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onEditToggle) { Icon(Icons.Filled.Edit, contentDescription = null); Text("Edit") }
+                            TextButton(onClick = onDismiss) { Text("Close") }
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.graphicsLayer { rotationY = 180f }) {
+                        ItemImageThumbnail(
+                            imagePath = item.imagePath,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                        )
+                        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Price") }, modifier = Modifier.weight(1f))
+                            OutlinedTextField(value = quantity, onValueChange = { quantity = it }, label = { Text("Qty") }, modifier = Modifier.weight(1f))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { retakeLauncher.launch(null) }) { Text("Retake") }
+                            Button(onClick = { galleryLauncher.launch("image/*") }) { Text("Gallery") }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                val updated = item.copy(
+                                    name = name.trim(),
+                                    price = price.toDoubleOrNull() ?: item.price,
+                                    quantity = quantity.toIntOrNull() ?: item.quantity,
+                                    category = category.trim().ifBlank { item.category }
+                                )
+                                onSave(updated)
+                            }) { Text("Save") }
+                            TextButton(onClick = onEditToggle) { Text("Back") }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1628,8 +1766,12 @@ private fun PerformanceTab(
     settings: AppSettings,
     onHapticFeedbackChange: (Boolean) -> Unit,
     onOcrSensitivityChange: (Boolean) -> Unit,
-    onAutoSaveBatchesChange: (Boolean) -> Unit
+    onAutoSaveBatchesChange: (Boolean) -> Unit,
+    onGreenStockThresholdChange: (Int) -> Unit,
+    onAmberStockThresholdChange: (Int) -> Unit
 ) {
+    var greenThresholdText by rememberSaveable(settings.greenStockThreshold) { mutableStateOf(settings.greenStockThreshold.toString()) }
+    var amberThresholdText by rememberSaveable(settings.amberStockThreshold) { mutableStateOf(settings.amberStockThreshold.toString()) }
 
     Column(
         modifier = Modifier
@@ -1640,6 +1782,28 @@ private fun PerformanceTab(
         SettingToggleRow("Haptic Feedback", settings.hapticFeedbackEnabled, onHapticFeedbackChange)
         SettingToggleRow("OCR Sensitivity (High)", settings.highOcrSensitivity, onOcrSensitivityChange)
         SettingToggleRow("Auto-Save Batches", settings.autoSaveBatches, onAutoSaveBatchesChange)
+
+        Text(text = "Stock thresholds", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+            value = greenThresholdText,
+            onValueChange = {
+                greenThresholdText = it.filter { ch -> ch.isDigit() }
+                greenThresholdText.toIntOrNull()?.let(onGreenStockThresholdChange)
+            },
+            label = { Text("Green at or above") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = amberThresholdText,
+            onValueChange = {
+                amberThresholdText = it.filter { ch -> ch.isDigit() }
+                amberThresholdText.toIntOrNull()?.let(onAmberStockThresholdChange)
+            },
+            label = { Text("Amber at or above") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
