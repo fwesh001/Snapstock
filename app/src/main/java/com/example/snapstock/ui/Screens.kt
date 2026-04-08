@@ -583,7 +583,9 @@ fun SettingsScreen(
                     settings = settingsState,
                     onHapticFeedbackChange = settingsViewModel::updateHapticFeedbackEnabled,
                     onOcrSensitivityChange = settingsViewModel::updateHighOcrSensitivity,
-                    onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches
+                    onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches,
+                    onGreenStockThresholdChange = settingsViewModel::updateGreenStockThreshold,
+                    onAmberStockThresholdChange = settingsViewModel::updateAmberStockThreshold
                 )
                 else -> SafetyZoneTab()
             }
@@ -1087,8 +1089,6 @@ fun CollectionScreen(
     val filteredItems = remember(items, selectedCategory) {
         if (selectedCategory == "All") items else items.filter { it.category == selectedCategory }
     }
-    val density = LocalDensity.current
-
     Scaffold(
         topBar = { CenterAlignedTopAppBar(title = { Text("Collection") }) },
         bottomBar = {
@@ -1128,13 +1128,13 @@ fun CollectionScreen(
                         rowItems.forEach { item ->
                             CollectionGridCard(
                                 item = item,
-                                    modifier = Modifier.weight(1f),
-                                    onClick = {
-                                        selectedItem = item
-                                        isEditing = false
-                                    },
-                                    greenThreshold = settingsState.greenStockThreshold,
-                                    amberThreshold = settingsState.amberStockThreshold
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    selectedItem = item
+                                    isEditing = false
+                                },
+                                greenThreshold = settingsState.greenStockThreshold,
+                                amberThreshold = settingsState.amberStockThreshold
                             )
                         }
                         if (rowItems.size == 1) {
@@ -1199,7 +1199,7 @@ private fun CollectionGridCard(
     val stockColor = when {
         item.quantity >= greenThreshold -> MaterialTheme.colorScheme.primary
         item.quantity >= amberThreshold -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
+        else -> MaterialTheme.colorScheme.error
     }
 
     Card(modifier = modifier, onClick = onClick) {
@@ -1251,6 +1251,7 @@ private fun CollectionDetailDialog(
     }
 
     val rotation by animateFloatAsState(targetValue = if (isEditing) 180f else 0f, label = "collectionFlip")
+    val density = LocalDensity.current
 
     Dialog(onDismissRequest = onDismiss) {
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -1787,8 +1788,9 @@ private fun PerformanceTab(
         OutlinedTextField(
             value = greenThresholdText,
             onValueChange = {
-                greenThresholdText = it.filter { ch -> ch.isDigit() }
-                greenThresholdText.toIntOrNull()?.let(onGreenStockThresholdChange)
+                val filtered = it.filter { ch -> ch.isDigit() }
+                greenThresholdText = filtered
+                filtered.toIntOrNull()?.let(onGreenStockThresholdChange)
             },
             label = { Text("Green at or above") },
             singleLine = true,
@@ -1797,14 +1799,41 @@ private fun PerformanceTab(
         OutlinedTextField(
             value = amberThresholdText,
             onValueChange = {
-                amberThresholdText = it.filter { ch -> ch.isDigit() }
-                amberThresholdText.toIntOrNull()?.let(onAmberStockThresholdChange)
+                val filtered = it.filter { ch -> ch.isDigit() }
+                amberThresholdText = filtered
+                filtered.toIntOrNull()?.let(onAmberStockThresholdChange)
             },
             label = { Text("Amber at or above") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
     }
+}
+
+private fun saveBitmapToCollectionFile(context: Context, bitmap: Bitmap): String {
+    val imageDir = File(context.filesDir, "collection_images")
+    if (!imageDir.exists()) {
+        imageDir.mkdirs()
+    }
+    val outputFile = File(imageDir, "collection_${System.currentTimeMillis()}.jpg")
+    FileOutputStream(outputFile).use { stream ->
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 92, stream)
+    }
+    return outputFile.absolutePath
+}
+
+private fun copyUriToCollectionFile(context: Context, uri: android.net.Uri): String {
+    val imageDir = File(context.filesDir, "collection_images")
+    if (!imageDir.exists()) {
+        imageDir.mkdirs()
+    }
+    val outputFile = File(imageDir, "collection_${System.currentTimeMillis()}.jpg")
+    context.contentResolver.openInputStream(uri)?.use { input ->
+        FileOutputStream(outputFile).use { output ->
+            input.copyTo(output)
+        }
+    }
+    return outputFile.absolutePath
 }
 
 @Composable
