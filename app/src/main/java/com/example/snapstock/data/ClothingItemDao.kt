@@ -10,7 +10,7 @@ interface ClothingItemDao {
     suspend fun insertItem(item: ClothingItem)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertItems(items: List<ClothingItem>)
+    suspend fun insertItems(items: List<ClothingItem>): List<Long>
 
     @Update
     suspend fun updateItem(item: ClothingItem)
