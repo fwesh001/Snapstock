@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 sealed class Route(val route: String) {
     object Splash : Route("splash")
     object Dashboard : Route("dashboard")
+    object Collection : Route("collection")
     object Search : Route("search")
     object Settings : Route("settings")
     object BatchCapture : Route("batch_capture")
@@ -23,6 +24,12 @@ fun AppNavHost(navController: NavHostController) {
         navController.navigate(Route.Dashboard.route) {
             launchSingleTop = true
             popUpTo(Route.Dashboard.route) { inclusive = false }
+        }
+    }
+
+    val navigateToCollection = {
+        navController.navigate(Route.Collection.route) {
+            launchSingleTop = true
         }
     }
 
@@ -53,20 +60,28 @@ fun AppNavHost(navController: NavHostController) {
             DashboardScreen(
                 onSearchClick = navigateToSearch,
                 onSettingsClick = navigateToSettings,
+                onCollectionClick = navigateToCollection,
                 onBatchCaptureClick = { navController.navigate(Route.BatchCapture.route) }
+            )
+        }
+        composable(Route.Collection.route) {
+            CollectionScreen(
+                onHomeClick = navigateToDashboard,
+                onCollectionClick = navigateToCollection,
+                onSettingsClick = navigateToSettings
             )
         }
         composable(Route.Search.route) {
             SearchScreen(
                 onHomeClick = navigateToDashboard,
-                onCollectionClick = { },
+                onCollectionClick = navigateToCollection,
                 onSettingsClick = navigateToSettings
             )
         }
         composable(Route.Settings.route) {
             SettingsScreen(
                 onHomeClick = navigateToDashboard,
-                onCollectionClick = { },
+                onCollectionClick = navigateToCollection,
                 onSettingsClick = { }
             )
         }
