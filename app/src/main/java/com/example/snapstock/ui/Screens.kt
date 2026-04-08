@@ -764,11 +764,8 @@ fun BatchCaptureScreen(
                     Icon(
                         imageVector = Icons.Filled.Delete,
                         contentDescription = "Remove capture",
-            Button(
-                onClick = onContinue,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Continue editing")
+                        tint = if (uiState.captureCount > 0 && !isAwaitingUndo) {
+                            MaterialTheme.colorScheme.onErrorContainer
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         }
