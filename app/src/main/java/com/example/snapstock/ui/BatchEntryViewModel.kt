@@ -8,6 +8,7 @@ import com.example.snapstock.data.AppDatabase
 import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
 import com.example.snapstock.data.SettingsRepository
+import com.example.snapstock.data.TodoEntry
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -44,6 +45,7 @@ sealed interface BatchSaveEvent {
 
 class BatchEntryViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = AppDatabase.getDatabase(application).clothingItemDao()
+    private val todoDao = AppDatabase.getDatabase(application).todoEntryDao()
     private val settingsRepository = SettingsRepository(application)
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private var currentSettings = AppSettings()
@@ -162,7 +164,7 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun saveBatch() {
+    fun saveBatch(createTodo: Boolean = false) {
         commitLastRemoval()
         val state = _uiState.value
         if (state.drafts.isEmpty()) {
@@ -206,7 +208,17 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
 
         viewModelScope.launch {
             try {
-                dao.insertItems(entities)
+                val insertedIds = dao.insertItems(entities).map { it.toInt() }
+                if (createTodo) {
+                    todoDao.insertTodoEntry(
+                        TodoEntry(
+                            title = "Complete batch details",
+                            itemIdsCsv = insertedIds.joinToString(","),
+                            createdAt = now,
+                            completed = false
+                        )
+                    )
+                }
                 nextLocalId = 1
                 _uiState.value = BatchEntryUiState()
                 _events.emit(BatchSaveEvent.Success(savedCount = entities.size))
