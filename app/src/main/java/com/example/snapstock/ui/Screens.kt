@@ -1105,13 +1105,17 @@ fun CollectionScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(vertical = 16.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
         ) {
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
                     items(categories) { category ->
-                        FilterChipLike(label = category, selected = category == selectedCategory, onClick = { selectedCategory = category })
+                        FilterChipLike(
+                            label = category,
+                            selected = category == selectedCategory,
+                            onClick = { selectedCategory = category }
+                        )
                     }
                 }
             }
@@ -1124,7 +1128,7 @@ fun CollectionScreen(
                 }
             } else {
                 items(filteredItems.chunked(2)) { rowItems ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                         rowItems.forEach { item ->
                             CollectionGridCard(
                                 item = item,
@@ -1176,13 +1180,19 @@ fun CollectionScreen(
 private fun FilterChipLike(label: String, selected: Boolean, onClick: () -> Unit) {
     Card(
         onClick = onClick,
+        shape = RoundedCornerShape(50),
         colors = CardDefaults.cardColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-        )
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            }
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (selected) 4.dp else 1.dp)
     ) {
         Text(
             text = label,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
             color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
@@ -1202,21 +1212,26 @@ private fun CollectionGridCard(
         else -> MaterialTheme.colorScheme.error
     }
 
-    Card(modifier = modifier, onClick = onClick) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(8.dp)) {
+    Card(
+        modifier = modifier,
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(8.dp)) {
             Box {
                 ItemImageThumbnail(
                     imagePath = item.imagePath,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .height(152.dp)
+                        .clip(RoundedCornerShape(14.dp))
                 )
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                        .size(12.dp)
+                        .padding(7.dp)
+                        .size(11.dp)
                         .clip(CircleShape)
                         .background(stockColor)
                 )
@@ -1265,13 +1280,13 @@ private fun CollectionDetailDialog(
                     .padding(16.dp)
             ) {
                 if (rotation < 90f) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         ItemImageThumbnail(
                             imagePath = item.imagePath,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .height(230.dp)
+                                .clip(RoundedCornerShape(18.dp))
                         )
                         Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("Category: ${item.category}")
@@ -1282,13 +1297,13 @@ private fun CollectionDetailDialog(
                         }
                     }
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.graphicsLayer { rotationY = 180f }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.graphicsLayer { rotationY = 180f }) {
                         ItemImageThumbnail(
                             imagePath = item.imagePath,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(180.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(18.dp))
                         )
                         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.fillMaxWidth())
