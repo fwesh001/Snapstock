@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
@@ -17,6 +18,8 @@ private const val SETTINGS_DATASTORE_NAME = "app_settings"
 private const val DEFAULT_SHOP_NAME = "SnapStock"
 private const val DEFAULT_CURRENCY = "USD"
 private const val DEFAULT_CATEGORY = "Shirts"
+private const val DEFAULT_GREEN_STOCK_THRESHOLD = 3
+private const val DEFAULT_AMBER_STOCK_THRESHOLD = 1
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(
     name = SETTINGS_DATASTORE_NAME
@@ -26,6 +29,8 @@ data class AppSettings(
     val shopName: String = DEFAULT_SHOP_NAME,
     val currencyCode: String = DEFAULT_CURRENCY,
     val defaultCategory: String = DEFAULT_CATEGORY,
+    val greenStockThreshold: Int = DEFAULT_GREEN_STOCK_THRESHOLD,
+    val amberStockThreshold: Int = DEFAULT_AMBER_STOCK_THRESHOLD,
     val hapticFeedbackEnabled: Boolean = true,
     val highOcrSensitivity: Boolean = false,
     val autoSaveBatches: Boolean = false
@@ -46,6 +51,8 @@ class SettingsRepository(private val context: Context) {
                 shopName = preferences[KEY_SHOP_NAME]?.takeIf { it.isNotBlank() } ?: DEFAULT_SHOP_NAME,
                 currencyCode = preferences[KEY_CURRENCY]?.takeIf { it.isNotBlank() } ?: DEFAULT_CURRENCY,
                 defaultCategory = preferences[KEY_DEFAULT_CATEGORY]?.takeIf { it.isNotBlank() } ?: DEFAULT_CATEGORY,
+                greenStockThreshold = preferences[KEY_GREEN_STOCK_THRESHOLD] ?: DEFAULT_GREEN_STOCK_THRESHOLD,
+                amberStockThreshold = preferences[KEY_AMBER_STOCK_THRESHOLD] ?: DEFAULT_AMBER_STOCK_THRESHOLD,
                 hapticFeedbackEnabled = preferences[KEY_HAPTIC_FEEDBACK] ?: true,
                 highOcrSensitivity = preferences[KEY_HIGH_OCR_SENSITIVITY] ?: false,
                 autoSaveBatches = preferences[KEY_AUTO_SAVE_BATCHES] ?: false
@@ -67,6 +74,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateDefaultCategory(defaultCategory: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[KEY_DEFAULT_CATEGORY] = defaultCategory
+        }
+    }
+
+    suspend fun updateGreenStockThreshold(threshold: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_GREEN_STOCK_THRESHOLD] = threshold
+        }
+    }
+
+    suspend fun updateAmberStockThreshold(threshold: Int) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_AMBER_STOCK_THRESHOLD] = threshold
         }
     }
 
@@ -93,6 +112,8 @@ class SettingsRepository(private val context: Context) {
         private val KEY_SHOP_NAME = stringPreferencesKey("shop_name")
         private val KEY_CURRENCY = stringPreferencesKey("currency")
         private val KEY_DEFAULT_CATEGORY = stringPreferencesKey("default_category")
+        private val KEY_GREEN_STOCK_THRESHOLD = intPreferencesKey("green_stock_threshold")
+        private val KEY_AMBER_STOCK_THRESHOLD = intPreferencesKey("amber_stock_threshold")
         private val KEY_HAPTIC_FEEDBACK = booleanPreferencesKey("haptic_feedback_enabled")
         private val KEY_HIGH_OCR_SENSITIVITY = booleanPreferencesKey("high_ocr_sensitivity")
         private val KEY_AUTO_SAVE_BATCHES = booleanPreferencesKey("auto_save_batches")
