@@ -8,6 +8,7 @@ import com.example.snapstock.data.ClothingItem
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 class CollectionViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = AppDatabase.getDatabase(application).clothingItemDao()
@@ -17,4 +18,10 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList()
     )
+
+    fun updateItem(item: ClothingItem) {
+        viewModelScope.launch {
+            dao.updateItem(item)
+        }
+    }
 }
