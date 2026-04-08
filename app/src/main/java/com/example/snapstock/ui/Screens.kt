@@ -372,20 +372,29 @@ private fun TodoReminderCard(
     val todoItems = remember(todoItemIds, items) {
         todoItemIds.mapNotNull { id -> items.firstOrNull { it.id == id } }
     }
+    val pendingCount = todoItems.size.takeIf { it > 0 } ?: todoItemIds.size
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(18.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(text = "To Do", style = MaterialTheme.typography.labelLarge)
-            Text(text = todo.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(text = "Tap to continue editing the saved batch.", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "$pendingCount items to complete",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = todo.title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
             if (todoItems.isNotEmpty()) {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(todoItems, key = { it.id }) { item ->
@@ -755,8 +764,11 @@ fun BatchCaptureScreen(
                     Icon(
                         imageVector = Icons.Filled.Delete,
                         contentDescription = "Remove capture",
-                        tint = if (uiState.captureCount > 0 && !isAwaitingUndo) {
-                            MaterialTheme.colorScheme.onErrorContainer
+            Button(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Continue editing")
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         }
