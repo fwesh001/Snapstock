@@ -1754,12 +1754,13 @@ private fun PersonalizationTab(
     onCurrencyChange: (String) -> Unit,
     onDefaultCategoryChange: (String) -> Unit
 ) {
-    val currencies = listOf("USD", "MXN", "EUR")
+    val currencies = listOf("USD", "MXN", "EUR", "NGN")
     val categories = listOf("Shirts", "Pants", "Denim", "Outerwear")
     var currencyExpanded by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
     val selectedCurrency = settings.currencyCode
     val selectedCategory = settings.defaultCategory
+    val selectedCurrencyLabel = if (selectedCurrency == "NGN") "₦" else selectedCurrency
 
     Column(
         modifier = Modifier
@@ -1777,12 +1778,13 @@ private fun PersonalizationTab(
 
         Box {
             OutlinedButton(onClick = { currencyExpanded = true }) {
-                Text("Currency: $selectedCurrency")
+                Text("Currency: $selectedCurrencyLabel")
             }
             DropdownMenu(expanded = currencyExpanded, onDismissRequest = { currencyExpanded = false }) {
                 currencies.forEach { currency ->
+                    val displayLabel = if (currency == "NGN") "₦" else currency
                     DropdownMenuItem(
-                        text = { Text(currency) },
+                        text = { Text(displayLabel) },
                         onClick = {
                             onCurrencyChange(currency)
                             currencyExpanded = false
