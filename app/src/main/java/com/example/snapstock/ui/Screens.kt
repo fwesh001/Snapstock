@@ -557,28 +557,41 @@ fun SearchScreen(
                         label = { Text("Search items") },
                         placeholder = { Text("Name or category") }
                     )
-                        IconButton(onClick = onCameraClick) {
-                            Icon(
-                                imageVector = Icons.Filled.PhotoCamera,
-                                contentDescription = "Open camera search"
-                            )
+                    IconButton(onClick = onCameraClick) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = "Open camera search"
+                        )
                     }
                 }
             }
 
             if (uiState.scannedImage != null && uiState.topMatches.isNotEmpty()) {
                 item {
-                    Text(
-                        text = "Top matches",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                    BestMatchHeroCard(
+                        item = uiState.topMatches.first(),
+                        matchCount = uiState.topMatches.size,
+                        onClick = {
+                            selectedItem = uiState.topMatches.first()
+                            isEditing = false
+                        }
                     )
                 }
-                items(uiState.topMatches, key = { it.id }) { item ->
-                    SearchResultCard(item = item, onClick = {
-                        selectedItem = item
-                        isEditing = false
-                    })
+
+                if (uiState.topMatches.size > 1) {
+                    item {
+                        Text(
+                            text = "More matches",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    items(uiState.topMatches.drop(1), key = { it.id }) { item ->
+                        SearchResultCard(item = item, onClick = {
+                            selectedItem = item
+                            isEditing = false
+                        })
+                    }
                 }
             }
 
