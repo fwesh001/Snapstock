@@ -20,6 +20,8 @@ sealed class Route(val route: String) {
 @Composable
 fun AppNavHost(navController: NavHostController) {
     val batchEntryViewModel: BatchEntryViewModel = viewModel()
+    val searchViewModel: SearchViewModel = viewModel()
+    val searchViewModel: SearchViewModel = viewModel()
 
     val navigateToDashboard = {
         navController.navigate(Route.Dashboard.route) {
@@ -74,9 +76,17 @@ fun AppNavHost(navController: NavHostController) {
         }
         composable(Route.Search.route) {
             SearchScreen(
+                searchViewModel = searchViewModel,
                 onHomeClick = navigateToDashboard,
                 onCollectionClick = navigateToCollection,
-                onSettingsClick = navigateToSettings
+                onSettingsClick = navigateToSettings,
+                onCameraClick = { navController.navigate(Route.SearchCamera.route) }
+            )
+        }
+        composable(Route.SearchCamera.route) {
+            SearchCameraScreen(
+                searchViewModel = searchViewModel,
+                onDoneClick = { navController.popBackStack() }
             )
         }
         composable(Route.Settings.route) {
