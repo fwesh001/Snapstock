@@ -1,6 +1,7 @@
 package com.example.snapstock.ui
 
 import android.app.Application
+import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.snapstock.data.AppDatabase
@@ -35,7 +36,8 @@ data class SearchUiState(
     val hasSearched: Boolean = false,
     val topMatches: List<ClothingItem> = emptyList(),
     val results: List<ClothingItem> = emptyList(),
-    val scannedImage: ScannedImageContext? = null
+    val scannedImage: ScannedImageContext? = null,
+    val visualMatchConfidence: Float = 0f
 )
 
 private data class SearchResultState(
@@ -54,6 +56,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private val signatureCache = mutableMapOf<String, ImageSignature?>()
     private val cacheLock = Any()
+    private val visualMatchConfidenceThreshold = 0.58f
 
     private val resultState = query
         .debounce(250)
@@ -89,7 +92,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         scannedImage,
         allItems
     ) { activeQuery, searchState, activeScannedImage, itemPool ->
-        val topMatches = findTopVisualMatches(itemPool, activeScannedImage?.signature)
+        val visualMatchResult = findTopVisualMatches(itemPool, activeScannedImage?.signature)
+        val topMatches = visualMatchResult.matches
         val topMatchIds = topMatches.map { it.id }.toSet()
 
         SearchUiState(
@@ -98,7 +102,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             hasSearched = searchState.hasSearched || activeScannedImage != null,
             topMatches = topMatches,
             results = searchState.results.filterNot { topMatchIds.contains(it.id) },
-            scannedImage = activeScannedImage
+            scannedImage = activeScannedImage,
+            visualMatchConfidence = visualMatchResult.confidence
         )
     }.stateIn(
         scope = viewModelScope,
@@ -122,34 +127,63 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     private suspend fun findTopVisualMatches(
         items: List<ClothingItem>,
         sourceSignature: ImageSignature?
-    ): List<ClothingItem> {
-        if (sourceSignature == null) return emptyList()
+    ): VisualMatchResult {
+        if (sourceSignature == null) return VisualMatchResult()
 
         return withContext(Dispatchers.Default) {
-            items.mapNotNull { item ->
+            val candidates = items.mapNotNull { item ->
                 val signature = resolveSignature(item.imagePath) ?: return@mapNotNull null
                 val hashDistance = ImageMatcher.hammingDistance(sourceSignature.averageHash, signature.averageHash)
                 val colorDistance = ImageMatcher.colorDistance(sourceSignature.dominantColor, signature.dominantColor)
-                val score = (hashDistance * 3) + (colorDistance / 32)
-                item to score
+                val hashScore = hashDistance / 64f
+                val colorScore = colorDistance / 765f
+                val score = (hashScore * 0.65f) + (colorScore * 0.35f)
+                val confidence = 1f - score.coerceIn(0f, 1f)
+                VisualMatchCandidate(item = item, score = score, confidence = confidence)
             }
-                .sortedBy { (_, score) -> score }
+
+            val best = candidates.minByOrNull { it.score } ?: return@withContext VisualMatchResult()
+            if (best.confidence < visualMatchConfidenceThreshold) {
+                return@withContext VisualMatchResult(confidence = best.confidence)
+            }
+
+            val matches = candidates
+                .sortedBy { it.score }
                 .take(8)
-                .map { (item, _) -> item }
+                .map { it.item }
+
+            VisualMatchResult(matches = matches, confidence = best.confidence)
         }
     }
 
     private fun resolveSignature(imagePath: String): ImageSignature? {
+        val cacheKey = buildSignatureCacheKey(imagePath)
         synchronized(cacheLock) {
-            if (signatureCache.containsKey(imagePath)) {
-                return signatureCache[imagePath]
+            if (signatureCache.containsKey(cacheKey)) {
+                return signatureCache[cacheKey]
             }
         }
 
         val computed = ImageMatcher.buildSignature(imagePath)
         synchronized(cacheLock) {
-            signatureCache[imagePath] = computed
+            signatureCache[cacheKey] = computed
         }
         return computed
     }
+
+    private fun buildSignatureCacheKey(imagePath: String): String {
+        val file = File(imagePath)
+        return "${file.absolutePath}:${file.lastModified()}:${file.length()}"
+    }
+
+    private data class VisualMatchCandidate(
+        val item: ClothingItem,
+        val score: Float,
+        val confidence: Float
+    )
+
+    private data class VisualMatchResult(
+        val matches: List<ClothingItem> = emptyList(),
+        val confidence: Float = 0f
+    )
 }
