@@ -1,6 +1,8 @@
 package com.example.snapstock.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.Intent
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
@@ -51,6 +53,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
@@ -154,6 +160,12 @@ fun DashboardScreen(
                             imageVector = Icons.Filled.Search,
                             contentDescription = "Search",
                             modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "Settings"
                         )
                     }
                 }
@@ -782,10 +794,36 @@ fun SettingsScreen(
     onCollectionClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
-    val tabs = listOf("Personalization", "Performance", "Safety Zone")
+    val tabs = listOf(
+        "Personalization" to Icons.Filled.Storefront,
+        "Performance" to Icons.Filled.Speed,
+        "Safety Zone" to Icons.Filled.Shield
+    )
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     val settingsViewModel: SettingsViewModel = viewModel()
     val settingsState by settingsViewModel.uiState.collectAsState()
+    val actionState by settingsViewModel.actionState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var confirmCleanup by rememberSaveable { mutableStateOf(false) }
+    var confirmReset by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        settingsViewModel.events.collect { effect ->
+            when (effect) {
+                is SettingsSideEffect.Message -> snackbarHostState.showSnackbar(effect.text)
+                is SettingsSideEffect.ShareExport -> {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = effect.mimeType
+                        putExtra(Intent.EXTRA_STREAM, effect.uri)
+                        clipData = ClipData.newRawUri("snapstock_export", effect.uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share export"))
+                }
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -800,7 +838,8 @@ fun SettingsScreen(
                 onCollectionClick = onCollectionClick,
                 onSettingsClick = onSettingsClick
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -808,10 +847,11 @@ fun SettingsScreen(
                 .padding(innerPadding)
         ) {
             TabRow(selectedTabIndex = selectedTabIndex) {
-                tabs.forEachIndexed { index, title ->
+                tabs.forEachIndexed { index, (title, icon) ->
                     Tab(
                         selected = selectedTabIndex == index,
                         onClick = { selectedTabIndex = index },
+                        icon = { Icon(imageVector = icon, contentDescription = null) },
                         text = { Text(title) }
                     )
                 }
@@ -832,9 +872,64 @@ fun SettingsScreen(
                     onGreenStockThresholdChange = settingsViewModel::updateGreenStockThreshold,
                     onAmberStockThresholdChange = settingsViewModel::updateAmberStockThreshold
                 )
-                else -> SafetyZoneTab()
+                else -> SafetyZoneTab(
+                    isBusy = actionState.isBusy,
+                    busyLabel = actionState.busyLabel,
+                    onCompress = settingsViewModel::compressImages,
+                    onCleanup = { confirmCleanup = true },
+                    onReset = { confirmReset = true },
+                    onExport = settingsViewModel::exportData
+                )
             }
         }
+    }
+
+    if (confirmCleanup) {
+        AlertDialog(
+            onDismissRequest = { confirmCleanup = false },
+            title = { Text("Clean up database") },
+            text = { Text("This will remove completed To Do entries and orphaned image files. Continue?") },
+            confirmButton = {
+                Button(onClick = {
+                    confirmCleanup = false
+                    settingsViewModel.cleanDatabase()
+                }) {
+                    Text("Clean up")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmCleanup = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Factory reset") },
+            text = { Text("This clears settings, inventory, To Do entries, and local image files. Continue?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmReset = false
+                        settingsViewModel.factoryReset()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError
+                    )
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmReset = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
@@ -2101,7 +2196,14 @@ private fun copyUriToCollectionFile(context: Context, uri: android.net.Uri): Str
 }
 
 @Composable
-private fun SafetyZoneTab() {
+private fun SafetyZoneTab(
+    isBusy: Boolean,
+    busyLabel: String,
+    onCompress: () -> Unit,
+    onCleanup: () -> Unit,
+    onReset: () -> Unit,
+    onExport: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -2110,24 +2212,62 @@ private fun SafetyZoneTab() {
     ) {
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
         ) {
-            Text(
-                text = "Safety Zone",
+            Column(
                 modifier = Modifier.padding(12.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Safety Zone",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = if (isBusy) busyLabel else "Amber / danger controls for app maintenance.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
         }
 
-        OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth()) {
-            Text("Image Compression")
+        Button(
+            onClick = onCompress,
+            enabled = !isBusy,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary
+            )
+        ) {
+            Text(if (isBusy && busyLabel.contains("Compress", ignoreCase = true)) "Compressing..." else "Image Compression")
         }
-        OutlinedButton(onClick = { }, modifier = Modifier.fillMaxWidth()) {
+
+        OutlinedButton(onClick = onCleanup, modifier = Modifier.fillMaxWidth(), enabled = !isBusy) {
             Text("Database Cleanup")
         }
-        Button(onClick = { }, modifier = Modifier.fillMaxWidth()) {
-            Text("Factory Reset")
+
+        Button(
+            onClick = onExport,
+            enabled = !isBusy,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(imageVector = Icons.Filled.Share, contentDescription = null)
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Export Data")
+        }
+
+        Button(
+            onClick = onReset,
+            enabled = !isBusy,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.error,
+                contentColor = MaterialTheme.colorScheme.onError
+            )
+        ) {
+            Text(if (isBusy && busyLabel.contains("Reset", ignoreCase = true)) "Resetting..." else "Factory Reset")
         }
         Spacer(modifier = Modifier.height(4.dp))
         Text(
