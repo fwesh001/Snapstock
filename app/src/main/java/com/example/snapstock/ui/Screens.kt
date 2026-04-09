@@ -162,12 +162,6 @@ fun DashboardScreen(
                             modifier = Modifier.size(24.dp)
                         )
                     }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "Settings"
-                        )
-                    }
                 }
             )
         },
@@ -554,13 +548,26 @@ fun SearchScreen(
                         label = { Text("Search items") },
                         placeholder = { Text("Name or category") }
                     )
-                    TextButton(onClick = onCameraClick) {
-                        Text("Camera")
+                    IconButton(onClick = onCameraClick) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = "Open scanner"
+                        )
                     }
                 }
             }
 
             if (uiState.scannedImage != null && uiState.topMatches.isNotEmpty()) {
+                item {
+                    SearchBestMatchHero(
+                        item = uiState.topMatches.first(),
+                        onClick = {
+                            selectedItem = uiState.topMatches.first()
+                            isEditing = false
+                        }
+                    )
+                }
+
                 item {
                     Text(
                         text = "Top matches",
@@ -568,7 +575,7 @@ fun SearchScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-                items(uiState.topMatches, key = { it.id }) { item ->
+                items(uiState.topMatches.drop(1), key = { it.id }) { item ->
                     SearchResultCard(item = item, onClick = {
                         selectedItem = item
                         isEditing = false
