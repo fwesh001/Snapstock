@@ -111,6 +111,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
+import com.example.snapstock.utils.ImageMatcher
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
 import java.io.FileOutputStream
@@ -491,13 +492,16 @@ private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
+    searchViewModel: SearchViewModel = viewModel(),
     onHomeClick: () -> Unit,
     onCollectionClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onCameraClick: () -> Unit = {}
 ) {
-    val searchViewModel: SearchViewModel = viewModel()
+    val collectionViewModel: CollectionViewModel = viewModel()
     val uiState by searchViewModel.uiState.collectAsState()
-    var scannerActive by rememberSaveable { mutableStateOf(false) }
+    var selectedItem by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
+    var isEditing by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -536,38 +540,234 @@ fun SearchScreen(
                         label = { Text("Search items") },
                         placeholder = { Text("Name or category") }
                     )
-                    TextButton(onClick = { scannerActive = !scannerActive }) {
-                        Text(if (scannerActive) "Stop" else "Camera")
+                    TextButton(onClick = onCameraClick) {
+                        Text("Camera")
                     }
                 }
             }
 
-            item {
-                if (scannerActive) {
-                    ScannerPreviewPlaceholder()
+            if (uiState.scannedImage != null && uiState.topMatches.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "Top matches",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                items(uiState.topMatches, key = { it.id }) { item ->
+                    SearchResultCard(item = item, onClick = {
+                        selectedItem = item
+                        isEditing = false
+                    })
                 }
             }
 
-            if (!scannerActive) {
-                when {
-                    uiState.query.isBlank() -> {
-                        item { SearchPromptCard() }
-                    }
+            when {
+                uiState.query.isBlank() && uiState.scannedImage == null -> {
+                    item { SearchPromptCard() }
+                }
 
-                    uiState.isSearching -> {
-                        item { SearchLoadingCard() }
-                    }
+                uiState.isSearching -> {
+                    item { SearchLoadingCard() }
+                }
 
-                    uiState.hasSearched && uiState.results.isEmpty() -> {
-                        item { SearchNoMatchCard(query = uiState.query.trim()) }
-                    }
+                uiState.hasSearched && uiState.results.isEmpty() && uiState.topMatches.isEmpty() -> {
+                    item { SearchNoMatchCard(query = uiState.query.trim()) }
+                }
 
-                    else -> {
-                        items(uiState.results, key = { it.id }) { item ->
-                            SearchResultCard(item = item)
+                else -> {
+                    if (uiState.results.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Matches",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
+
+                    items(uiState.results, key = { it.id }) { item ->
+                        SearchResultCard(item = item, onClick = {
+                            selectedItem = item
+                            isEditing = false
+                        })
+                    }
                 }
+            }
+        }
+
+        selectedItem?.let { item ->
+            CollectionDetailDialog(
+                item = item,
+                isEditing = isEditing,
+                onEditToggle = { isEditing = !isEditing },
+                onDismiss = {
+                    selectedItem = null
+                    isEditing = false
+                },
+                onSave = { updatedItem ->
+                    collectionViewModel.updateItem(updatedItem)
+                    selectedItem = updatedItem
+                    isEditing = false
+                },
+                onRetake = { updatedPath ->
+                    val updated = item.copy(imagePath = updatedPath)
+                    selectedItem = updated
+                    collectionViewModel.updateItem(updated)
+                },
+                onGalleryPick = { updatedPath ->
+                    val updated = item.copy(imagePath = updatedPath)
+                    selectedItem = updated
+                    collectionViewModel.updateItem(updated)
+                }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchCameraScreen(
+    searchViewModel: SearchViewModel,
+    onDoneClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var didCapture by rememberSaveable { mutableStateOf(false) }
+
+    val cameraController = remember(context) {
+        LifecycleCameraController(context).apply {
+            cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (!granted) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Camera permission is required for visual search.")
+            }
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission, lifecycleOwner) {
+        if (hasCameraPermission) {
+            cameraController.bindToLifecycle(lifecycleOwner)
+        }
+    }
+
+    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
+    var previousSignature by remember { mutableStateOf<ImageSignature?>(null) }
+
+    LaunchedEffect(hasCameraPermission, didCapture) {
+        if (!hasCameraPermission || didCapture) return@LaunchedEffect
+
+        repeat(8) {
+            delay(450)
+            if (didCapture) return@LaunchedEffect
+
+            val bitmap = previewViewRef?.bitmap ?: return@repeat
+            val currentSignature = ImageMatcher.buildSignature(bitmap)
+            val stable = previousSignature?.let {
+                ImageMatcher.hammingDistance(it.averageHash, currentSignature.averageHash) <= 10
+            } ?: false
+
+            previousSignature = currentSignature
+
+            if (stable) {
+                val photoFile = createBatchImageFile(context)
+                withContext(Dispatchers.Default) {
+                    FileOutputStream(photoFile).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                    }
+                }
+
+                searchViewModel.onImageScanned(photoFile.absolutePath)
+                didCapture = true
+                onDoneClick()
+                return@LaunchedEffect
+            }
+        }
+
+        if (!didCapture) {
+            val bitmap = previewViewRef?.bitmap
+            if (bitmap != null) {
+                val photoFile = createBatchImageFile(context)
+                withContext(Dispatchers.Default) {
+                    FileOutputStream(photoFile).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                    }
+                }
+                searchViewModel.onImageScanned(photoFile.absolutePath)
+                didCapture = true
+                onDoneClick()
+            }
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (hasCameraPermission) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            PreviewView(ctx).apply {
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                                controller = cameraController
+                                previewViewRef = this
+                            }
+                        }
+                    )
+                } else {
+                    Text(
+                        text = "Camera permission required",
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                Text(
+                    text = "Auto-detecting… hold steady",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 18.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.labelLarge
+                )
             }
         }
     }
@@ -1596,8 +1796,8 @@ private fun SearchNoMatchCard(query: String) {
 }
 
 @Composable
-private fun SearchResultCard(item: ClothingItem) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun SearchResultCard(item: ClothingItem, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
