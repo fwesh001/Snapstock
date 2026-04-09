@@ -1934,6 +1934,84 @@ private fun SearchNoMatchCard(query: String) {
 }
 
 @Composable
+private fun SearchBestMatchHero(item: ClothingItem, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Best match",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            ItemImageThumbnail(
+                imagePath = item.imagePath,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(18.dp))
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    text = "${item.category} • Qty ${item.quantity}",
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScannerLaserOverlay() {
+    val transition = rememberInfiniteTransition(label = "scannerLaser")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scannerLaserProgress"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val y = size.height * progress
+            drawLine(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                start = androidx.compose.ui.geometry.Offset(0f, y),
+                end = androidx.compose.ui.geometry.Offset(size.width, y),
+                strokeWidth = 6f
+            )
+        }
+
+        Text(
+            text = "Scanning…",
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 14.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge
+        )
+    }
+}
+
+@Composable
 private fun SearchResultCard(item: ClothingItem, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
