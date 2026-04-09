@@ -21,6 +21,9 @@ interface ClothingItemDao {
     @Query("SELECT * FROM clothing_items ORDER BY dateAdded DESC")
     fun getAllItems(): Flow<List<ClothingItem>>
 
+    @Query("SELECT * FROM clothing_items ORDER BY dateAdded DESC")
+    suspend fun getAllItemsOnce(): List<ClothingItem>
+
     @Query("SELECT * FROM clothing_items ORDER BY dateAdded DESC LIMIT 1")
     fun getLastAddedItem(): Flow<ClothingItem?>
 
