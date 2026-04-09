@@ -11,179 +11,179 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
-import androidx.camera.view.CameraController
-import androidx.camera.view.LifecycleCameraController
-import androidx.camera.view.PreviewView
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Storefront
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.snapstock.data.AppSettings
-import com.example.snapstock.data.ClothingItem
-import com.example.snapstock.utils.ImageMatcher
-import com.example.snapstock.utils.ImageSignature
-import com.example.snapstock.utils.OcrExtractor
-import java.io.File
-import java.io.FileOutputStream
-import java.util.Currency
-import java.text.NumberFormat
-import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DashboardScreen(
-    onSearchClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onCollectionClick: () -> Unit,
-    onBatchCaptureClick: () -> Unit,
-    dashboardViewModel: DashboardViewModel = viewModel(),
-    settingsViewModel: SettingsViewModel = viewModel()
-) {
-    val uiState by dashboardViewModel.uiState.collectAsState()
-    val settingsState by settingsViewModel.uiState.collectAsState()
-    var selectedNavItem by rememberSaveable { mutableStateOf(0) }
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var didCapture by rememberSaveable { mutableStateOf(false) }
+    var isScanning by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        selectedNavItem = 0
+    val cameraController = remember(context) {
+        LifecycleCameraController(context).apply {
+            cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
+        }
+    }
+
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (!granted) {
+            scope.launch {
+                snackbarHostState.showSnackbar("Camera permission is required for visual search.")
+            }
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    LaunchedEffect(hasCameraPermission, lifecycleOwner) {
+        if (hasCameraPermission) {
+            cameraController.bindToLifecycle(lifecycleOwner)
+        }
+    }
+
+    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
+    var previousSignature by remember { mutableStateOf<ImageSignature?>(null) }
+
+    LaunchedEffect(hasCameraPermission, isScanning, didCapture) {
+        if (!hasCameraPermission || !isScanning || didCapture) return@LaunchedEffect
+
+        repeat(8) {
+            delay(450)
+            if (didCapture) return@LaunchedEffect
+
+            val bitmap = previewViewRef?.bitmap ?: return@repeat
+            val currentSignature = ImageMatcher.buildSignature(bitmap)
+            val stable = previousSignature?.let {
+                ImageMatcher.hammingDistance(it.averageHash, currentSignature.averageHash) <= 10
+            } ?: false
+
+            previousSignature = currentSignature
+
+            if (stable) {
+                val photoFile = createBatchImageFile(context)
+                withContext(Dispatchers.Default) {
+                    FileOutputStream(photoFile).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                    }
+                }
+                searchViewModel.onImageScanned(photoFile.absolutePath)
+                didCapture = true
+                onDoneClick()
+                return@LaunchedEffect
+            }
+        }
+
+        if (!didCapture) {
+            val bitmap = previewViewRef?.bitmap
+            if (bitmap != null) {
+                val photoFile = createBatchImageFile(context)
+                withContext(Dispatchers.Default) {
+                    FileOutputStream(photoFile).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
+                    }
+                }
+                searchViewModel.onImageScanned(photoFile.absolutePath)
+                didCapture = true
+                onDoneClick()
+            }
+        }
     }
 
     Scaffold(
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text(text = "SnapStock", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {},
-                actions = {
-                    TextButton(onClick = onSearchClick) {
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (hasCameraPermission) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { ctx ->
+                            PreviewView(ctx).apply {
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                                controller = cameraController
+                                previewViewRef = this
+                            }
+                        }
+                    )
+                } else {
+                    Text(
+                        text = "Camera permission required",
+                        modifier = Modifier.align(Alignment.Center),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+
+                if (isScanning) {
+                    ScannerLaserOverlay()
+                } else {
+                    Text(
+                        text = "Tap shutter to start scanning",
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 108.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 18.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (isScanning || didCapture) return@IconButton
+                            isScanning = true
+                        },
+                        modifier = Modifier
+                            .size(92.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
+                            .border(
+                                width = 1.dp,
+                                color = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.32f),
+                                shape = CircleShape
+                            )
+                    ) {
                         Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = "Search",
-                            modifier = Modifier.size(24.dp)
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = if (isScanning) "Scanning" else "Start scanning",
+                            modifier = Modifier.size(54.dp),
+                            tint = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-            )
-        },
-        bottomBar = {
-            AppBottomNavigationBar(
-                selectedNavItem = selectedNavItem,
-                onHomeClick = { selectedNavItem = 0 },
-                onCollectionClick = {
-                    selectedNavItem = 1
-                    onCollectionClick()
-                },
-                onSettingsClick = {
-                    selectedNavItem = 2
-                    onSettingsClick()
-                }
-            )
-        },
-        floatingActionButton = {
-            HighlightedFab(
-                showHighlight = uiState.isEmpty,
-                onClick = onBatchCaptureClick
-            )
+            }
+        }
+    }
         }
     ) { innerPadding ->
         LazyColumn(
