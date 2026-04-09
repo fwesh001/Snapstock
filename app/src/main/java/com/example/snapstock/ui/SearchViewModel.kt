@@ -133,11 +133,13 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         return withContext(Dispatchers.Default) {
             val candidates = items.mapNotNull { item ->
                 val signature = resolveSignature(item.imagePath) ?: return@mapNotNull null
-                val hashDistance = ImageMatcher.hammingDistance(sourceSignature.averageHash, signature.averageHash)
-                val colorDistance = ImageMatcher.colorDistance(sourceSignature.dominantColor, signature.dominantColor)
-                val hashScore = hashDistance / 64f
-                val colorScore = colorDistance / 765f
-                val score = (hashScore * 0.65f) + (colorScore * 0.35f)
+                val aHashDist = ImageMatcher.hammingDistance(sourceSignature.averageHash, signature.averageHash)
+                val pHashDist = ImageMatcher.hammingDistance(sourceSignature.perceptualHash, signature.perceptualHash)
+                val colorDist = ImageMatcher.colorDistance(sourceSignature.dominantColor, signature.dominantColor)
+                val aHashScore = aHashDist / 64f
+                val pHashScore = pHashDist / 64f
+                val colorScore = colorDist / 765f
+                val score = (aHashScore * 0.40f) + (pHashScore * 0.35f) + (colorScore * 0.25f)
                 val confidence = 1f - score.coerceIn(0f, 1f)
                 VisualMatchCandidate(item = item, score = score, confidence = confidence)
             }
