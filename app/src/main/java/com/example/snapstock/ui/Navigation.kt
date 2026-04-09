@@ -11,6 +11,7 @@ sealed class Route(val route: String) {
     object Dashboard : Route("dashboard")
     object Collection : Route("collection")
     object Search : Route("search")
+    object SearchCamera : Route("search_camera")
     object Settings : Route("settings")
     object BatchCapture : Route("batch_capture")
     object BatchEntry : Route("batch_entry")
