@@ -1979,25 +1979,57 @@ private fun ScannerLaserOverlay() {
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1100),
+            animation = tween(durationMillis = 1050),
             repeatMode = RepeatMode.Restart
         ),
         label = "scannerLaserProgress"
+    )
+    val pulseProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scannerPulseProgress"
     )
 
     Box(modifier = Modifier.fillMaxSize()) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val y = size.height * progress
+            val centerX = size.width * 0.5f
+            val centerY = size.height * 0.5f
+
+            val ringRadiusA = (size.minDimension * 0.12f) + (size.minDimension * 0.2f * pulseProgress)
+            val ringRadiusB = (size.minDimension * 0.18f) + (size.minDimension * 0.24f * ((pulseProgress + 0.45f) % 1f))
+
+            drawCircle(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = (1f - pulseProgress) * 0.26f),
+                radius = ringRadiusA,
+                center = androidx.compose.ui.geometry.Offset(centerX, centerY)
+            )
+            drawCircle(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                radius = ringRadiusB,
+                center = androidx.compose.ui.geometry.Offset(centerX, centerY)
+            )
+
             drawLine(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                 start = androidx.compose.ui.geometry.Offset(0f, y),
                 end = androidx.compose.ui.geometry.Offset(size.width, y),
-                strokeWidth = 6f
+                strokeWidth = 14f
+            )
+            drawLine(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.95f),
+                start = androidx.compose.ui.geometry.Offset(0f, y),
+                end = androidx.compose.ui.geometry.Offset(size.width, y),
+                strokeWidth = 4f
             )
         }
 
         Text(
-            text = "Scanning…",
+            text = "Scanning in progress…",
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .padding(top = 14.dp)
