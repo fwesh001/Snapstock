@@ -21,9 +21,15 @@ interface TodoEntryDao {
     @Query("SELECT * FROM todo_entries ORDER BY createdAt DESC")
     fun getAllTodos(): Flow<List<TodoEntry>>
 
+    @Query("SELECT * FROM todo_entries ORDER BY createdAt DESC")
+    suspend fun getAllTodosOnce(): List<TodoEntry>
+
     @Query("UPDATE todo_entries SET completed = 1 WHERE id = :todoId")
     suspend fun markCompleted(todoId: Int)
 
     @Query("DELETE FROM todo_entries WHERE id = :todoId")
     suspend fun deleteTodo(todoId: Int)
+
+    @Query("DELETE FROM todo_entries WHERE completed = 1")
+    suspend fun deleteCompletedTodos()
 }
