@@ -660,6 +660,7 @@ fun SearchCameraScreen(
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    var isScanning by rememberSaveable { mutableStateOf(false) }
         )
     }
     var didCapture by rememberSaveable { mutableStateOf(false) }
@@ -739,18 +740,51 @@ fun SearchCameraScreen(
                 searchViewModel.onImageScanned(photoFile.absolutePath)
                 didCapture = true
                 onDoneClick()
-            }
-        }
-    }
+                if (!isScanning) {
+                    Text(
+                        text = "Tap shutter to start scanning",
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 108.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                } else {
+                    ScannerLaserOverlay()
+                }
 
-    Scaffold(
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 18.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (isScanning || didCapture) return@IconButton
+                            isScanning = true
+                        },
+                        modifier = Modifier
+                            .size(92.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
+                            .border(
+                                width = 1.dp,
+                                color = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.32f),
+                                shape = CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = if (isScanning) "Scanning" else "Start scanning",
+                            modifier = Modifier.size(54.dp),
+                            tint = if (isScanning) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
         ) {
             Box(
                 modifier = Modifier
