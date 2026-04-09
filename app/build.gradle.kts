@@ -71,10 +71,10 @@ dependencies {
 
     // ML Kit
     implementation(libs.mlkit.text.recognition)
-    implementation(libs.mlkit.barcode.scanning)
+    implementation(libs.mlkit.barcode)
 
     // Image color extraction
-    implementation(libs.androidx.palette.ktx)
+    implementation(libs.androidx.palette)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
