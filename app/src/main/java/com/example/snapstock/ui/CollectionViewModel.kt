@@ -9,7 +9,6 @@ import com.example.snapstock.data.TodoEntry
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class CollectionViewModel(application: Application) : AndroidViewModel(application) {
