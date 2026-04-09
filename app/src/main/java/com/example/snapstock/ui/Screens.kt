@@ -759,7 +759,7 @@ fun SearchCameraScreen(
                 }
 
                 Text(
-                    text = "Auto-detectingΓÇª hold steady",
+                    text = "Auto-detecting... hold steady",
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = 18.dp)
@@ -1631,7 +1631,7 @@ private fun BatchDraftEditorCard(
                     ) {
                         Text("Name")
                         if (draft.ocrNameConfident) {
-                            Text("Γ£ô", style = MaterialTheme.typography.labelSmall)
+                            Text("OK", style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
@@ -1656,7 +1656,7 @@ private fun BatchDraftEditorCard(
                         ) {
                             Text("Price")
                             if (draft.ocrPriceConfident) {
-                                Text("Γ£ô", style = MaterialTheme.typography.labelSmall)
+                                Text("OK", style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
@@ -1973,7 +1973,7 @@ private fun PersonalizationTab(
     var categoryExpanded by remember { mutableStateOf(false) }
     val selectedCurrency = settings.currencyCode
     val selectedCategory = settings.defaultCategory
-    val selectedCurrencyLabel = if (selectedCurrency == "NGN") "Γéª" else selectedCurrency
+    val selectedCurrencyLabel = if (selectedCurrency == "NGN") "NGN (Naira)" else selectedCurrency
 
     Column(
         modifier = Modifier
@@ -1995,7 +1995,7 @@ private fun PersonalizationTab(
             }
             DropdownMenu(expanded = currencyExpanded, onDismissRequest = { currencyExpanded = false }) {
                 currencies.forEach { currency ->
-                    val displayLabel = if (currency == "NGN") "Γéª" else currency
+                    val displayLabel = if (currency == "NGN") "NGN (Naira)" else currency
                     DropdownMenuItem(
                         text = { Text(displayLabel) },
                         onClick = {
