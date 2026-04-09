@@ -706,55 +706,6 @@ fun SearchCameraScreen(
         }
     }
 
-    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
-    var previousSignature by remember { mutableStateOf<ImageSignature?>(null) }
-
-    LaunchedEffect(hasCameraPermission, didCapture) {
-        if (!hasCameraPermission || didCapture) return@LaunchedEffect
-
-        repeat(8) {
-            delay(450)
-            if (didCapture) return@LaunchedEffect
-
-            val bitmap = previewViewRef?.bitmap ?: return@repeat
-            val currentSignature = ImageMatcher.buildSignature(bitmap)
-            val stable = previousSignature?.let {
-                ImageMatcher.hammingDistance(it.averageHash, currentSignature.averageHash) <= 10
-            } ?: false
-
-            previousSignature = currentSignature
-
-            if (stable) {
-                val photoFile = createBatchImageFile(context)
-                withContext(Dispatchers.Default) {
-                    FileOutputStream(photoFile).use { output ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
-                    }
-                }
-
-                searchViewModel.onImageScanned(photoFile.absolutePath)
-                didCapture = true
-                onDoneClick()
-                return@LaunchedEffect
-            }
-        }
-
-        if (!didCapture) {
-            val bitmap = previewViewRef?.bitmap
-            if (bitmap != null) {
-                val photoFile = createBatchImageFile(context)
-                withContext(Dispatchers.Default) {
-                    FileOutputStream(photoFile).use { output ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 90, output)
-                    }
-                }
-                searchViewModel.onImageScanned(photoFile.absolutePath)
-                didCapture = true
-                onDoneClick()
-            }
-        }
-    }
-
     Scaffold(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
     ) { innerPadding ->
@@ -777,7 +728,6 @@ fun SearchCameraScreen(
                             PreviewView(ctx).apply {
                                 scaleType = PreviewView.ScaleType.FILL_CENTER
                                 controller = cameraController
-                                previewViewRef = this
                             }
                         }
                     )
@@ -789,18 +739,83 @@ fun SearchCameraScreen(
                     )
                 }
 
-                Text(
-                    text = "Auto-detecting... hold steady",
+                ScannerLaserOverlay(
+                    active = isCapturing,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f)
+                    )
+                ) {
+                    Text(
+                        text = if (isCapturing) "Scanning..." else "Tap shutter to scan",
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 18.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                            shape = RoundedCornerShape(8.dp)
+                        .padding(bottom = 24.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (!hasCameraPermission || isCapturing) {
+                                if (!hasCameraPermission) {
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                }
+                                return@IconButton
+                            }
+
+                            val photoFile = createBatchImageFile(context)
+                            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                            isCapturing = true
+                            cameraController.takePicture(
+                                outputOptions,
+                                ContextCompat.getMainExecutor(context),
+                                object : ImageCapture.OnImageSavedCallback {
+                                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                                        scope.launch {
+                                            searchViewModel.onImageScanned(photoFile.absolutePath)
+                                            delay(180)
+                                            isCapturing = false
+                                            onDoneClick()
+                                        }
+                                    }
+
+                                    override fun onError(exception: ImageCaptureException) {
+                                        isCapturing = false
+                                        scope.launch {
+                                            snackbarHostState.showSnackbar("Capture failed. Please try again.")
+                                        }
+                                    }
+                                }
+                            )
+                        },
+                        modifier = Modifier
+                            .size(92.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.22f))
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.32f),
+                                shape = CircleShape
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.PhotoCamera,
+                            contentDescription = if (isCapturing) "Scanning" else "Shutter",
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.primary
                         )
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.labelLarge
-                )
+                    }
+                }
             }
         }
     }
