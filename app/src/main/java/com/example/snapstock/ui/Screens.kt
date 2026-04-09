@@ -593,37 +593,64 @@ fun SearchScreen(
                         })
                     }
                 }
-            }
-
-            when {
-                uiState.query.isBlank() && uiState.scannedImage == null -> {
-                    item { SearchPromptCard() }
-                }
-
-                uiState.isSearching -> {
-                    item { SearchLoadingCard() }
-                }
-
-                uiState.hasSearched && uiState.results.isEmpty() && uiState.topMatches.isEmpty() -> {
-                    item { SearchNoMatchCard(query = uiState.query.trim()) }
-                }
-
-                else -> {
-                    if (uiState.results.isNotEmpty()) {
-                        item {
+            } else if (uiState.scannedImage != null && uiState.visualMatchConfidence < 0.58f) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text(
-                                text = "Matches",
+                                text = "No confident match",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Text(
+                                text = "Try a clearer photo or search by name",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f)
                             )
                         }
                     }
+                }
+            }
 
-                    items(uiState.results, key = { it.id }) { item ->
-                        SearchResultCard(item = item, onClick = {
-                            selectedItem = item
-                            isEditing = false
-                        })
+            if (uiState.scannedImage == null) {
+                when {
+                    uiState.query.isBlank() && uiState.scannedImage == null -> {
+                        item { SearchPromptCard() }
+                    }
+
+                    uiState.isSearching -> {
+                        item { SearchLoadingCard() }
+                    }
+
+                    uiState.hasSearched && uiState.results.isEmpty() && uiState.topMatches.isEmpty() -> {
+                        item { SearchNoMatchCard(query = uiState.query.trim()) }
+                    }
+
+                    else -> {
+                        if (uiState.results.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "Matches",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        items(uiState.results, key = { it.id }) { item ->
+                            SearchResultCard(item = item, onClick = {
+                                selectedItem = item
+                                isEditing = false
+                            })
+                        }
                     }
                 }
             }
