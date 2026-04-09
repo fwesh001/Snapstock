@@ -8,7 +8,8 @@ import kotlin.math.min
 
 data class ImageSignature(
     val dominantColor: Int,
-    val averageHash: Long
+    val averageHash: Long,
+    val perceptualHash: Long = 0L
 )
 
 object ImageMatcher {
@@ -17,7 +18,8 @@ object ImageMatcher {
         val normalized = centerCropSquare(bitmap)
         val dominant = extractDominantColor(normalized)
         val hash = computeAverageHash(normalized)
-        return ImageSignature(dominantColor = dominant, averageHash = hash)
+        val phash = computePerceptualHash(normalized)
+        return ImageSignature(dominantColor = dominant, averageHash = hash, perceptualHash = phash)
     }
 
     fun buildSignature(imagePath: String): ImageSignature? {
@@ -85,5 +87,37 @@ object ImageMatcher {
         }
 
         return hash
+    }
+
+    private fun computePerceptualHash(source: Bitmap): Long {
+        val scaled = Bitmap.createScaledBitmap(source, 32, 32, true)
+        val grays = IntArray(1024)
+        for (i in 0 until 32) {
+            for (j in 0 until 32) {
+                val pixel = scaled.getPixel(j, i)
+                val gray = (
+                    (android.graphics.Color.red(pixel) * 299) +
+                        (android.graphics.Color.green(pixel) * 587) +
+                        (android.graphics.Color.blue(pixel) * 114)
+                    ) / 1000
+                grays[i * 32 + j] = gray
+            }
+        }
+
+        var total = 0L
+        for (gray in grays) {
+            total += gray
+        }
+        val average = total / 1024.0
+
+        var phash = 0L
+        for ((index, gray) in grays.withIndex()) {
+            if (index < 64) {
+                if (gray >= average) {
+                    phash = phash or (1L shl index)
+                }
+            }
+        }
+        return phash
     }
 }
