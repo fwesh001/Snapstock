@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.palette.graphics.Palette
 import kotlin.math.abs
+import kotlin.math.min
 
 data class ImageSignature(
     val dominantColor: Int,
@@ -13,8 +14,9 @@ data class ImageSignature(
 object ImageMatcher {
 
     fun buildSignature(bitmap: Bitmap): ImageSignature {
-        val dominant = extractDominantColor(bitmap)
-        val hash = computeAverageHash(bitmap)
+        val normalized = centerCropSquare(bitmap)
+        val dominant = extractDominantColor(normalized)
+        val hash = computeAverageHash(normalized)
         return ImageSignature(dominantColor = dominant, averageHash = hash)
     }
 
@@ -45,6 +47,15 @@ object ImageMatcher {
     private fun extractDominantColor(bitmap: Bitmap): Int {
         val palette = Palette.from(bitmap).maximumColorCount(16).generate()
         return palette.dominantSwatch?.rgb ?: android.graphics.Color.GRAY
+    }
+
+    private fun centerCropSquare(bitmap: Bitmap): Bitmap {
+        val size = min(bitmap.width, bitmap.height)
+        if (bitmap.width == size && bitmap.height == size) return bitmap
+
+        val left = (bitmap.width - size) / 2
+        val top = (bitmap.height - size) / 2
+        return Bitmap.createBitmap(bitmap, left, top, size, size)
     }
 
     private fun computeAverageHash(source: Bitmap): Long {
