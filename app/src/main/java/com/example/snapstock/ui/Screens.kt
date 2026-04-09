@@ -557,8 +557,11 @@ fun SearchScreen(
                         label = { Text("Search items") },
                         placeholder = { Text("Name or category") }
                     )
-                    TextButton(onClick = onCameraClick) {
-                        Text("Camera")
+                        IconButton(onClick = onCameraClick) {
+                            Icon(
+                                imageVector = Icons.Filled.PhotoCamera,
+                                contentDescription = "Open camera search"
+                            )
                     }
                 }
             }
@@ -658,12 +661,12 @@ fun SearchCameraScreen(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
-    var didCapture by rememberSaveable { mutableStateOf(false) }
+    var isCapturing by rememberSaveable { mutableStateOf(false) }
 
     val cameraController = remember(context) {
         LifecycleCameraController(context).apply {
             cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
+            setEnabledUseCases(CameraController.IMAGE_CAPTURE)
         }
     }
 
