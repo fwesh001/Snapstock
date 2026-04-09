@@ -107,6 +107,12 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun resetSettings() {
+        context.settingsDataStore.edit { preferences ->
+            preferences.clear()
+        }
+    }
+
     companion object {
 
         private val KEY_SHOP_NAME = stringPreferencesKey("shop_name")
