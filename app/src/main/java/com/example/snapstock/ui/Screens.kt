@@ -403,24 +403,39 @@ private fun TodoReminderCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
-            if (todoItems.isNotEmpty()) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(todoItems, key = { it.id }) { item ->
-                        ItemImageThumbnail(
-                            imagePath = item.imagePath,
-                            modifier = Modifier.size(64.dp)
-                        )
-                    }
-                }
-            }
-            Button(
-                onClick = onContinue,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Continue editing")
+                if (todoItems.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(todoItems, key = { it.id }) { item ->
+                            ItemImageThumbnail(
+                                imagePath = item.imagePath,
+                                modifier = Modifier.size(64.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+
+                Button(
+                    onClick = onContinue,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.secondary,
+                        contentColor = MaterialTheme.colorScheme.onSecondary
+                    )
+                ) {
+                    Icon(imageVector = Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text("Continue")
+                }
             }
         }
     }
@@ -1327,6 +1342,7 @@ fun CollectionScreen(
     collectionViewModel: CollectionViewModel = viewModel()
 ) {
     val items by collectionViewModel.items.collectAsState()
+    val pendingTodos by collectionViewModel.pendingTodos.collectAsState()
     val settingsViewModel: SettingsViewModel = viewModel()
     val settingsState by settingsViewModel.uiState.collectAsState()
     var selectedCategory by rememberSaveable { mutableStateOf("All") }
@@ -1335,6 +1351,13 @@ fun CollectionScreen(
     val categories = remember(items) { listOf("All") + items.map { it.category }.distinct().sorted() }
     val filteredItems = remember(items, selectedCategory) {
         if (selectedCategory == "All") items else items.filter { it.category == selectedCategory }
+    }
+    val firstPendingTodo = pendingTodos.firstOrNull()
+    val firstPendingTodoItems = remember(firstPendingTodo, items) {
+        val ids = firstPendingTodo?.itemIdsCsv.orEmpty()
+            .split(",")
+            .mapNotNull { it.trim().toIntOrNull() }
+        ids.mapNotNull { id -> items.firstOrNull { it.id == id } }
     }
     Scaffold(
         topBar = { CenterAlignedTopAppBar(title = { Text("Collection") }) },
@@ -1364,6 +1387,21 @@ fun CollectionScreen(
                             onClick = { selectedCategory = category }
                         )
                     }
+                }
+            }
+
+            if (firstPendingTodo != null) {
+                item {
+                    TodoReminderCard(
+                        todo = firstPendingTodo,
+                        items = items,
+                        onContinue = {
+                            firstPendingTodoItems.firstOrNull()?.let { first ->
+                                selectedItem = first
+                                isEditing = false
+                            }
+                        }
+                    )
                 }
             }
 
@@ -1516,7 +1554,11 @@ private fun CollectionDetailDialog(
     val density = LocalDensity.current
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(modifier = Modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .heightIn(max = 700.dp)
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1524,15 +1566,15 @@ private fun CollectionDetailDialog(
                         rotationY = rotation
                         cameraDistance = 16 * density.density
                     }
-                    .padding(16.dp)
+                    .padding(18.dp)
             ) {
                 if (rotation < 90f) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         ItemImageThumbnail(
                             imagePath = item.imagePath,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(230.dp)
+                                .height(360.dp)
                                 .clip(RoundedCornerShape(18.dp))
                         )
                         Text(item.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
@@ -1544,12 +1586,12 @@ private fun CollectionDetailDialog(
                         }
                     }
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.graphicsLayer { rotationY = 180f }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.graphicsLayer { rotationY = 180f }) {
                         ItemImageThumbnail(
                             imagePath = item.imagePath,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp)
+                                .height(320.dp)
                                 .clip(RoundedCornerShape(18.dp))
                         )
                         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
