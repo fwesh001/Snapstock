@@ -1777,44 +1777,169 @@ private fun PlaceholderScreen(title: String, subtitle: String, onBackClick: () -
 }
 
 @Composable
-private fun ScannerPreviewPlaceholder() {
-    val transition = rememberInfiniteTransition(label = "laserScan")
+private fun ScannerLaserOverlay(
+    active: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "scannerLaser")
     val laserColor = MaterialTheme.colorScheme.primary
-    val lineProgress by transition.animateFloat(
+    val sweepProgress by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200),
+            animation = tween(durationMillis = 1300, easing = androidx.compose.animation.core.LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
-        label = "laserLineProgress"
+        label = "laserSweepProgress"
+    )
+    val pulseProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "laserPulseProgress"
     )
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f)
+            val scanBandHalfWidth = size.width * 0.34f
+            val scanY = size.height * (0.18f + sweepProgress * 0.62f)
+            val pulseRadius = size.minDimension * (0.18f + pulseProgress * 0.02f)
+            val ringAlpha = if (active) 0.42f else 0.18f
+            val beamAlpha = if (active) 1f else 0.45f
+
+            drawCircle(
+                color = laserColor.copy(alpha = ringAlpha * (1f - pulseProgress * 0.45f)),
+                radius = pulseRadius,
+                center = center,
+                style = Stroke(width = 6f)
+            )
+            drawCircle(
+                color = laserColor.copy(alpha = ringAlpha * 0.5f),
+                radius = pulseRadius * 1.42f,
+                center = center,
+                style = Stroke(width = 2f)
+            )
+            drawLine(
+                color = laserColor.copy(alpha = beamAlpha),
+                start = androidx.compose.ui.geometry.Offset(center.x - scanBandHalfWidth, scanY),
+                end = androidx.compose.ui.geometry.Offset(center.x + scanBandHalfWidth, scanY),
+                strokeWidth = if (active) 10f else 7f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+            drawLine(
+                color = androidx.compose.ui.graphics.Color.White.copy(alpha = if (active) 0.45f else 0.18f),
+                start = androidx.compose.ui.geometry.Offset(center.x - scanBandHalfWidth * 0.72f, scanY),
+                end = androidx.compose.ui.geometry.Offset(center.x + scanBandHalfWidth * 0.72f, scanY),
+                strokeWidth = 2f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
+
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .padding(12.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val y = size.height * lineProgress
-                drawLine(
-                    color = laserColor,
-                    start = androidx.compose.ui.geometry.Offset(0f, y),
-                    end = androidx.compose.ui.geometry.Offset(size.width, y),
-                    strokeWidth = 5f
+                .align(Alignment.Center)
+                .size(220.dp)
+                .border(
+                    width = 1.5.dp,
+                    color = laserColor.copy(alpha = if (active) 0.42f else 0.22f),
+                    shape = RoundedCornerShape(28.dp)
                 )
+        )
+
+        Text(
+            text = if (active) "Scanning object..." else "Ready to scan",
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 104.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.70f),
+                    shape = RoundedCornerShape(999.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun BestMatchHeroCard(
+    item: ClothingItem,
+    matchCount: Int,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Best match",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Card(
+                    shape = CircleShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text(
+                        text = "$matchCount matches",
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
-            Text(
-                text = "Laser scan active...",
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 10.dp),
-                style = MaterialTheme.typography.labelLarge
-            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ItemImageThumbnail(
+                    imagePath = item.imagePath,
+                    modifier = Modifier
+                        .size(104.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                )
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = item.category,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f)
+                    )
+                    Text(
+                        text = "Qty ${item.quantity} • ${item.price}",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
         }
     }
 }
