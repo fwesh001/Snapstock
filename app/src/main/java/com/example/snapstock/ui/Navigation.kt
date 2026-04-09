@@ -21,7 +21,6 @@ sealed class Route(val route: String) {
 fun AppNavHost(navController: NavHostController) {
     val batchEntryViewModel: BatchEntryViewModel = viewModel()
     val searchViewModel: SearchViewModel = viewModel()
-    val searchViewModel: SearchViewModel = viewModel()
 
     val navigateToDashboard = {
         navController.navigate(Route.Dashboard.route) {
