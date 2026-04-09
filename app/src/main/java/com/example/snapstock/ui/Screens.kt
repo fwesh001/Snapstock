@@ -112,6 +112,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
 import com.example.snapstock.utils.ImageMatcher
+import com.example.snapstock.utils.ImageSignature
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
 import java.io.FileOutputStream
