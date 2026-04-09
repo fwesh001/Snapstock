@@ -1,7 +1,6 @@
 *.iml
 .gradle
 /local.properties
-/.idea/
 /.idea/caches
 /.idea/libraries
 /.idea/modules.xml
@@ -14,6 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
-/.kotlin/
-*.log
+/.kotlin/errors/errors-1774528969051.log
 /app/PRD.md

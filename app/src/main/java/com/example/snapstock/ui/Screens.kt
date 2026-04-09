@@ -15,10 +15,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageAnalysis
-import androidx.core.content.ContextCompat
-import com.example.snapstock.utils.ScannerAnalyzer
-import java.util.concurrent.Executors
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.view.CameraController
 import androidx.camera.view.LifecycleCameraController
@@ -45,10 +41,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -87,7 +79,6 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -101,7 +92,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
@@ -117,10 +107,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
-import com.example.snapstock.utils.ImageMatcher
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
 import java.io.FileOutputStream
@@ -422,7 +412,7 @@ private fun TodoReminderCard(
             }
             Button(
                 onClick = onContinue,
-                colors = ButtonDefaults.buttonColors(
+                colors = CardDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.secondary,
                     contentColor = MaterialTheme.colorScheme.onSecondary
                 )
@@ -501,27 +491,13 @@ private fun HighlightedFab(showHighlight: Boolean, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    searchViewModel: SearchViewModel = viewModel(),
     onHomeClick: () -> Unit,
     onCollectionClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onCameraClick: () -> Unit = {}
+    onSettingsClick: () -> Unit
 ) {
+    val searchViewModel: SearchViewModel = viewModel()
     val uiState by searchViewModel.uiState.collectAsState()
-    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
-    val filterPalette = remember {
-        listOf(
-            "#D32F2F" to "Red",
-            "#1976D2" to "Blue",
-            "#2E7D32" to "Green",
-            "#F9A825" to "Yellow",
-            "#616161" to "Gray",
-            "#6A1B9A" to "Purple",
-            "#212121" to "Black",
-            "#F5F5F5" to "White"
-        )
-    }
-    val showPromptState = uiState.query.isBlank() && uiState.selectedColorHex == null && uiState.similarItems.isEmpty()
+    var scannerActive by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -538,94 +514,58 @@ fun SearchScreen(
             )
         }
     ) { innerPadding ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                OutlinedTextField(
-                    value = uiState.query,
-                    onValueChange = searchViewModel::onQueryChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text("Search items") },
-                    placeholder = { Text("Name or category") },
-                    trailingIcon = {
-                        IconButton(onClick = onCameraClick) {
-                            Icon(
-                                imageVector = Icons.Filled.PhotoCamera,
-                                contentDescription = "Start visual search camera",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                )
-            }
-
-            item(span = { GridItemSpan(maxLineSpan) }) {
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = { filtersExpanded = !filtersExpanded }) {
-                        Text(if (filtersExpanded) "Hide filters" else "Advanced filters")
-                    }
-
-                    if (uiState.hasImageContext) {
-                        TextButton(onClick = searchViewModel::clearImageContext) {
-                            Text("Clear image match")
-                        }
-                    }
-                }
-            }
-
-            if (filtersExpanded) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    AdvancedColorFilterCard(
-                        selectedColorHex = uiState.selectedColorHex,
-                        colors = filterPalette,
-                        onSelect = searchViewModel::onColorFilterChange
+                    OutlinedTextField(
+                        value = uiState.query,
+                        onValueChange = searchViewModel::onQueryChange,
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        label = { Text("Search items") },
+                        placeholder = { Text("Name or category") }
                     )
-                }
-            }
-
-            if (uiState.similarItems.isNotEmpty()) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    SearchSectionHeader("Similar to scanned image")
-                }
-                gridItems(uiState.similarItems, key = { it.id }) { item ->
-                    SearchResultGridCard(item = item, isSimilar = true)
-                }
-            }
-
-            when {
-                showPromptState -> {
-                    item(span = { GridItemSpan(maxLineSpan) }) { SearchPromptCard() }
-                }
-
-                uiState.isSearching -> {
-                    item(span = { GridItemSpan(maxLineSpan) }) { SearchLoadingCard() }
-                }
-
-                uiState.hasSearched && uiState.results.isEmpty() && uiState.similarItems.isEmpty() -> {
-                    item(span = { GridItemSpan(maxLineSpan) }) { SearchNoMatchCard(query = uiState.query.trim()) }
-                }
-
-                else -> {
-                    if (uiState.results.isNotEmpty()) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            SearchSectionHeader("Matches")
-                        }
+                    TextButton(onClick = { scannerActive = !scannerActive }) {
+                        Text(if (scannerActive) "Stop" else "Camera")
                     }
-                    gridItems(uiState.results, key = { it.id }) { item ->
-                        SearchResultGridCard(item = item)
+                }
+            }
+
+            item {
+                if (scannerActive) {
+                    ScannerPreviewPlaceholder()
+                }
+            }
+
+            if (!scannerActive) {
+                when {
+                    uiState.query.isBlank() -> {
+                        item { SearchPromptCard() }
+                    }
+
+                    uiState.isSearching -> {
+                        item { SearchLoadingCard() }
+                    }
+
+                    uiState.hasSearched && uiState.results.isEmpty() -> {
+                        item { SearchNoMatchCard(query = uiState.query.trim()) }
+                    }
+
+                    else -> {
+                        items(uiState.results, key = { it.id }) { item ->
+                            SearchResultCard(item = item)
+                        }
                     }
                 }
             }
@@ -1002,253 +942,6 @@ fun BatchCaptureScreen(
                 onRemoveCurrent = { removeCaptureAt(it) },
                 onDismiss = { previewImageIndex = null }
             )
-        }
-    }
-}
-
-@Composable
-fun SearchCameraScreen(
-    searchViewModel: SearchViewModel,
-    onDoneClick: () -> Unit
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    var hasCameraPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
-        if (!granted) {
-            scope.launch {
-                snackbarHostState.showSnackbar("Camera permission is required to search.")
-            }
-        }
-    }
-
-    LaunchedEffect(hasCameraPermission) {
-        if (!hasCameraPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    val uiState by searchViewModel.uiState.collectAsState()
-    var previewImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
-    
-    // Auto-capture tracker state
-    var lastCaptureTime by remember { mutableStateOf(0L) }
-
-    val cameraController = remember(context) {
-        LifecycleCameraController(context).apply {
-            cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
-            setImageAnalysisAnalyzer(
-                ContextCompat.getMainExecutor(context),
-                ScannerAnalyzer(
-                    onBarcodeDetected = { barcode ->
-                        searchViewModel.onScannerTextDetected(barcode)
-                        scope.launch { snackbarHostState.showSnackbar("Found barcode/text, tracking.") }
-                    },
-                    onTextDetected = { text ->
-                        searchViewModel.onScannerTextDetected(text)
-                    }
-                )
-            )
-        }
-    }
-
-    // Auto-capture frame extraction hack
-    LaunchedEffect(cameraController) {
-        while (true) {
-            delay(1500)
-            if (!hasCameraPermission) continue
-            
-            val bitmap = previewViewRef?.bitmap
-            if (bitmap != null && System.currentTimeMillis() - lastCaptureTime > 3000) {
-                // Background visual scan
-                withContext(Dispatchers.Default) {
-                    val tempFile = createBatchImageFile(context)
-                    FileOutputStream(tempFile).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 85, out)
-                    }
-                    val path = tempFile.absolutePath
-                    withContext(Dispatchers.Main) {
-                        lastCaptureTime = System.currentTimeMillis()
-                        searchViewModel.onImagesScanned(listOf(path))
-                    }
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(hasCameraPermission, lifecycleOwner) {
-        if (hasCameraPermission) {
-            cameraController.bindToLifecycle(lifecycleOwner)
-        }
-    }
-
-    Scaffold(
-        bottomBar = {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                LazyRow(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    itemsIndexed(uiState.scannedImages, key = { index, _ -> index }) { index, scannedImage ->
-                        val isHighlighted = if (previewImageIndex != null) {
-                            previewImageIndex == index
-                        } else {
-                            index == uiState.scannedImages.lastIndex
-                        }
-
-                        ItemImageThumbnail(
-                            imagePath = scannedImage.imagePath,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .border(
-                                    width = if (isHighlighted) 1.5.dp else 0.dp,
-                                    color = if (isHighlighted) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                                    } else {
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0f)
-                                    },
-                                    shape = RoundedCornerShape(12.dp)
-                                )
-                                .clickable { previewImageIndex = index }
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = {
-                        val targetIndex = previewImageIndex ?: uiState.scannedImages.lastIndex
-                        if (targetIndex >= 0) {
-                            searchViewModel.onScannerImageRemoved(targetIndex)
-                            if (targetIndex >= uiState.scannedImages.size - 1) {
-                                previewImageIndex = null
-                            }
-                        }
-                    },
-                    enabled = uiState.scannedImages.isNotEmpty(),
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(CircleShape)
-                        .background(
-                            if (uiState.scannedImages.isNotEmpty()) {
-                                MaterialTheme.colorScheme.errorContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            }
-                        )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "Remove capture",
-                        tint = if (uiState.scannedImages.isNotEmpty()) {
-                            MaterialTheme.colorScheme.onErrorContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                    )
-                }
-
-                IconButton(
-                    onClick = onDoneClick,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = "Done",
-                        modifier = Modifier.size(32.dp),
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                if (hasCameraPermission) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            PreviewView(ctx).apply {
-                                scaleType = PreviewView.ScaleType.FILL_CENTER
-                                controller = cameraController
-                                previewViewRef = this
-                            }
-                        }
-                    )
-                } else {
-                    Text(
-                        text = "Camera permission required",
-                        modifier = Modifier.align(Alignment.Center),
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 16.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                            shape = RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "Auto-scanning colors and patterns...",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-
-        previewImageIndex?.let { index ->
-            if (index in uiState.scannedImages.indices) {
-                FullImagePreviewDialog(
-                    imagePaths = uiState.scannedImages.map { it.imagePath },
-                    initialIndex = index,
-                    onIndexChange = { previewImageIndex = it },
-                    onRemoveCurrent = { 
-                        searchViewModel.onScannerImageRemoved(it) 
-                        previewImageIndex = null 
-                    },
-                    onDismiss = { previewImageIndex = null }
-                )
-            } else {
-                previewImageIndex = null
-            }
         }
     }
 }
@@ -1809,64 +1502,7 @@ private fun PlaceholderScreen(title: String, subtitle: String, onBackClick: () -
 }
 
 @Composable
-private fun ScannerCameraPreview(
-    onFrameBitmap: (Bitmap) -> Unit,
-    onBarcodeDetected: (String) -> Unit,
-    onTextDetected: (String) -> Unit
-) {
-    val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var hasPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-
-    val cameraPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasPermission = granted
-    }
-
-    LaunchedEffect(hasPermission) {
-        if (!hasPermission) {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    if (!hasPermission) {
-        Card(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("Camera permission required for scanner.", modifier = Modifier.padding(16.dp))
-        }
-        return
-    }
-
-    var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
-
-    val cameraController = remember(context) {
-        LifecycleCameraController(context).apply {
-            cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            setEnabledUseCases(CameraController.IMAGE_ANALYSIS)
-            setImageAnalysisAnalyzer(
-                ContextCompat.getMainExecutor(context),
-                ScannerAnalyzer(
-                    onBarcodeDetected = { barcode ->
-                        previewViewRef?.bitmap?.let(onFrameBitmap)
-                        onBarcodeDetected(barcode)
-                    },
-                    onTextDetected = { text ->
-                        previewViewRef?.bitmap?.let(onFrameBitmap)
-                        onTextDetected(text)
-                    }
-                )
-            )
-        }
-    }
-
-    LaunchedEffect(cameraController, lifecycleOwner) {
-        cameraController.bindToLifecycle(lifecycleOwner)
-    }
-
+private fun ScannerPreviewPlaceholder() {
     val transition = rememberInfiniteTransition(label = "laserScan")
     val laserColor = MaterialTheme.colorScheme.primary
     val lineProgress by transition.animateFloat(
@@ -1888,15 +1524,6 @@ private fun ScannerCameraPreview(
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    PreviewView(ctx).apply {
-                        this.controller = cameraController
-                        previewViewRef = this
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val y = size.height * lineProgress
                 drawLine(
@@ -1907,88 +1534,12 @@ private fun ScannerCameraPreview(
                 )
             }
             Text(
-                text = "Scanning barcode or text...",
+                text = "Laser scan active...",
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                        shape = RoundedCornerShape(4.dp)
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                    .padding(top = 10.dp),
+                style = MaterialTheme.typography.labelLarge
             )
-        }
-    }
-}
-
-@Composable
-private fun SearchSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp)
-    )
-}
-
-@Composable
-private fun AdvancedColorFilterCard(
-    selectedColorHex: String?,
-    colors: List<Pair<String, String>>,
-    onSelect: (String?) -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = "Color filter",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(colors) { (hex, label) ->
-                    val chipColor = ImageMatcher.parseColorHex(hex)?.let { Color(it) } ?: MaterialTheme.colorScheme.surfaceVariant
-                    val selected = selectedColorHex == hex
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(chipColor)
-                            .border(
-                                width = if (selected) 3.dp else 1.dp,
-                                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                shape = CircleShape
-                            )
-                            .clickable { onSelect(hex) }
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = selectedColorHex?.let { selected ->
-                        colors.firstOrNull { it.first == selected }?.second?.let { "$it selected" } ?: "Custom color selected"
-                    } ?: "No color selected",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                TextButton(onClick = { onSelect(null) }) {
-                    Text("Clear")
-                }
-            }
         }
     }
 }
@@ -2064,51 +1615,6 @@ private fun SearchResultCard(item: ClothingItem) {
                 Text(text = "Category: ${item.category}")
                 Text(text = "Qty: ${item.quantity}   Price: ${item.price}")
             }
-        }
-    }
-}
-
-@Composable
-private fun SearchResultGridCard(item: ClothingItem, isSimilar: Boolean = false) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (isSimilar) {
-                Text(
-                    text = "Similar",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            ItemImageThumbnail(
-                imagePath = item.imagePath,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-            )
-
-            Text(
-                text = item.name,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = item.category,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = "Qty: ${item.quantity}",
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }

@@ -66,19 +66,3 @@ $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 ```
 
-- Here are more brainstormed ideas for the search feature, specifically focusing on 100% offline capabilities using on-device processing and local database (Room/SQLite) tricks:
-
-1. Offline AI & Advanced Camera (No internet required)
-Local Barcode & QR Scanner: Integrate Google's on-device ML Kit to read standard retail barcodes (EAN/UPC). You can scan a clothing tag and instantly pull up the exact item if it matches the name or a new sku field, entirely offline.
-On-Device Tag Reading (OCR): Use local Text Recognition to read care tags or size labels. Just point the camera at a tag that says "Size M - 100% Cotton", and the app locally extracts "Medium" and "Cotton" to filter your search.
-Color-Based Visual Search: When you save an item, the app can use Android's Palette API to figure out the dominant color of the clothing purely from the image. In the search screen, you could have a row of color dots (Red, Blue, Black) to tap and filter items without typing.
-2. Smarter Local Database Queries (Room/SQLite)
-Typo Tolerance (Fuzzy Matching): Currently, if you type "shrt", "shirt" won't show up. We can implement a local algorithm (like Levenshtein distance or Soundex) in Kotlin to understand common misspellings and surface the right items offline.
-Smart Filter Sliders: Add offline sliding filters under the search bar to filter by numeric data:
-Quantity Slider: Find items between 0 and 5 in stock over a specific search.
-Price Range: Slide to find items between $10 and $30.
-Zero-State Local History: Create a small local table that remembers your last 10 searches. When you tap the search box, it immediately shows your history and "Most Searched" items so you can skip typing.
-3. Power-User UI/UX Enhancements
-Bottom Sheet "Quick Edit": Instead of opening a full new screen when you tap a search result, it pulls up a Bottom Sheet over the bottom half of your screen. You can tweak the quantity or price, swipe it down, and you're instantly back at your exact search results.
-Multi-Select Bulk Actions: Long-press a card in the search grid to enter "Selection Mode." Tap multiple items to apply an offline bulk action, like "Discount all by 10%", "Add to To-Do List", or "Mark as Out of Stock".
-Dynamic Grid Sizing: Add a toggle in the corner to switch between a dense list view (good for reading lots of data/reading names) and the 2-column image grid (good for visual scanning).

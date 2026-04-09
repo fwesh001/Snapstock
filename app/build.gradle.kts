@@ -69,10 +69,8 @@ dependencies {
     implementation(libs.androidx.camera.view)
     implementation(libs.androidx.camera.extensions)
 
-    // ML Kit & Palette
+    // ML Kit
     implementation(libs.mlkit.text.recognition)
-    implementation(libs.mlkit.barcode)
-    implementation(libs.androidx.palette)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)

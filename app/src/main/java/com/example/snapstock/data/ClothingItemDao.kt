@@ -32,15 +32,7 @@ interface ClothingItemDao {
         SELECT * FROM clothing_items
         WHERE name LIKE '%' || :query || '%' COLLATE NOCASE
            OR category LIKE '%' || :query || '%' COLLATE NOCASE
-        ORDER BY
-            CASE
-                WHEN LOWER(name) = LOWER(:query) THEN 0
-                WHEN LOWER(category) = LOWER(:query) THEN 1
-                WHEN LOWER(name) LIKE '%' || LOWER(:query) || '%' THEN 2
-                WHEN LOWER(category) LIKE '%' || LOWER(:query) || '%' THEN 3
-                ELSE 4
-            END,
-            dateAdded DESC
+        ORDER BY dateAdded DESC
         """
     )
     fun searchItems(query: String): Flow<List<ClothingItem>>
