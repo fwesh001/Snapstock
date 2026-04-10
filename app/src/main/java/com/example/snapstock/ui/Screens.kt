@@ -593,7 +593,7 @@ fun SearchScreen(
                         })
                     }
                 }
-            } else if (uiState.scannedImage != null && uiState.visualMatchConfidence < 0.58f) {
+            } else if (uiState.scannedImage != null && uiState.topMatches.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
