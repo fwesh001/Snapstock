@@ -1,7 +1,9 @@
 package com.example.snapstock.utils
 
+import android.media.ExifInterface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import androidx.palette.graphics.Palette
 import kotlin.math.abs
 import kotlin.math.min
@@ -24,7 +26,8 @@ object ImageMatcher {
 
     fun buildSignature(imagePath: String): ImageSignature? {
         val bitmap = BitmapFactory.decodeFile(imagePath) ?: return null
-        return buildSignature(bitmap)
+        val oriented = normalizeOrientation(bitmap, imagePath)
+        return buildSignature(oriented)
     }
 
     fun colorToHex(color: Int): String = String.format("#%06X", 0xFFFFFF and color)
@@ -90,34 +93,49 @@ object ImageMatcher {
     }
 
     private fun computePerceptualHash(source: Bitmap): Long {
-        val scaled = Bitmap.createScaledBitmap(source, 32, 32, true)
-        val grays = IntArray(1024)
-        for (i in 0 until 32) {
-            for (j in 0 until 32) {
-                val pixel = scaled.getPixel(j, i)
-                val gray = (
-                    (android.graphics.Color.red(pixel) * 299) +
-                        (android.graphics.Color.green(pixel) * 587) +
-                        (android.graphics.Color.blue(pixel) * 114)
+        val scaled = Bitmap.createScaledBitmap(source, 9, 8, true)
+        var hash = 0L
+        var bitIndex = 0
+
+        for (row in 0 until 8) {
+            for (col in 0 until 8) {
+                val left = scaled.getPixel(col, row)
+                val right = scaled.getPixel(col + 1, row)
+
+                val leftGray = (
+                    (android.graphics.Color.red(left) * 299) +
+                        (android.graphics.Color.green(left) * 587) +
+                        (android.graphics.Color.blue(left) * 114)
                     ) / 1000
-                grays[i * 32 + j] = gray
-            }
-        }
+                val rightGray = (
+                    (android.graphics.Color.red(right) * 299) +
+                        (android.graphics.Color.green(right) * 587) +
+                        (android.graphics.Color.blue(right) * 114)
+                    ) / 1000
 
-        var total = 0L
-        for (gray in grays) {
-            total += gray
-        }
-        val average = total / 1024.0
-
-        var phash = 0L
-        for ((index, gray) in grays.withIndex()) {
-            if (index < 64) {
-                if (gray >= average) {
-                    phash = phash or (1L shl index)
+                if (leftGray > rightGray) {
+                    hash = hash or (1L shl bitIndex)
                 }
+                bitIndex++
             }
         }
-        return phash
+
+        return hash
+    }
+
+    private fun normalizeOrientation(bitmap: Bitmap, imagePath: String): Bitmap {
+        val exif = runCatching { ExifInterface(imagePath) }.getOrNull() ?: return bitmap
+        val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+
+        val rotation = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> 0f
+        }
+
+        if (rotation == 0f) return bitmap
+        val matrix = Matrix().apply { postRotate(rotation) }
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 }
