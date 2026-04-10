@@ -57,6 +57,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     private val signatureCache = mutableMapOf<String, ImageSignature?>()
     private val cacheLock = Any()
     private val visualMatchConfidenceThreshold = 0.58f
+    private val visualMatchSeparationThreshold = 0.06f
 
     private val resultState = query
         .debounce(250)
@@ -117,6 +118,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onImageScanned(imagePath: String) {
         val signature = ImageMatcher.buildSignature(imagePath) ?: return
+        query.value = ""
         scannedImage.value = ScannedImageContext(imagePath = imagePath, signature = signature)
     }
 
@@ -139,18 +141,24 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 val aHashScore = aHashDist / 64f
                 val pHashScore = pHashDist / 64f
                 val colorScore = colorDist / 765f
-                val score = (aHashScore * 0.40f) + (pHashScore * 0.35f) + (colorScore * 0.25f)
+                val score = (aHashScore * 0.32f) + (pHashScore * 0.48f) + (colorScore * 0.20f)
                 val confidence = 1f - score.coerceIn(0f, 1f)
                 VisualMatchCandidate(item = item, score = score, confidence = confidence)
             }
 
             val best = candidates.minByOrNull { it.score } ?: return@withContext VisualMatchResult()
+            val sortedCandidates = candidates.sortedBy { it.score }
+            val secondBest = sortedCandidates.getOrNull(1)
+            val separation = secondBest?.let { it.score - best.score } ?: visualMatchSeparationThreshold
+
             if (best.confidence < visualMatchConfidenceThreshold) {
                 return@withContext VisualMatchResult(confidence = best.confidence)
             }
+            if (separation < visualMatchSeparationThreshold) {
+                return@withContext VisualMatchResult(confidence = best.confidence)
+            }
 
-            val matches = candidates
-                .sortedBy { it.score }
+            val matches = sortedCandidates
                 .take(8)
                 .map { it.item }
 
