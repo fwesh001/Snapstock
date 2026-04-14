@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +30,7 @@ data class AppSettings(
     val shopName: String = DEFAULT_SHOP_NAME,
     val currencyCode: String = DEFAULT_CURRENCY,
     val defaultCategory: String = DEFAULT_CATEGORY,
+    val customCategories: Set<String> = emptySet(),
     val greenStockThreshold: Int = DEFAULT_GREEN_STOCK_THRESHOLD,
     val amberStockThreshold: Int = DEFAULT_AMBER_STOCK_THRESHOLD,
     val hapticFeedbackEnabled: Boolean = true,
@@ -51,6 +53,7 @@ class SettingsRepository(private val context: Context) {
                 shopName = preferences[KEY_SHOP_NAME]?.takeIf { it.isNotBlank() } ?: DEFAULT_SHOP_NAME,
                 currencyCode = preferences[KEY_CURRENCY]?.takeIf { it.isNotBlank() } ?: DEFAULT_CURRENCY,
                 defaultCategory = preferences[KEY_DEFAULT_CATEGORY]?.takeIf { it.isNotBlank() } ?: DEFAULT_CATEGORY,
+                customCategories = preferences[KEY_CUSTOM_CATEGORIES] ?: emptySet(),
                 greenStockThreshold = preferences[KEY_GREEN_STOCK_THRESHOLD] ?: DEFAULT_GREEN_STOCK_THRESHOLD,
                 amberStockThreshold = preferences[KEY_AMBER_STOCK_THRESHOLD] ?: DEFAULT_AMBER_STOCK_THRESHOLD,
                 hapticFeedbackEnabled = preferences[KEY_HAPTIC_FEEDBACK] ?: true,
@@ -74,6 +77,19 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateDefaultCategory(defaultCategory: String) {
         context.settingsDataStore.edit { preferences ->
             preferences[KEY_DEFAULT_CATEGORY] = defaultCategory
+        }
+    }
+
+    suspend fun addCustomCategory(category: String) {
+        val normalized = category.trim()
+        if (normalized.isBlank()) return
+
+        context.settingsDataStore.edit { preferences ->
+            val existing = (preferences[KEY_CUSTOM_CATEGORIES] ?: emptySet()).toMutableSet()
+            if (existing.none { it.equals(normalized, ignoreCase = true) }) {
+                existing.add(normalized)
+                preferences[KEY_CUSTOM_CATEGORIES] = existing
+            }
         }
     }
 
@@ -118,11 +134,14 @@ class SettingsRepository(private val context: Context) {
         private val KEY_SHOP_NAME = stringPreferencesKey("shop_name")
         private val KEY_CURRENCY = stringPreferencesKey("currency")
         private val KEY_DEFAULT_CATEGORY = stringPreferencesKey("default_category")
+        private val KEY_CUSTOM_CATEGORIES = stringSetPreferencesKey("custom_categories")
         private val KEY_GREEN_STOCK_THRESHOLD = intPreferencesKey("green_stock_threshold")
         private val KEY_AMBER_STOCK_THRESHOLD = intPreferencesKey("amber_stock_threshold")
         private val KEY_HAPTIC_FEEDBACK = booleanPreferencesKey("haptic_feedback_enabled")
         private val KEY_HIGH_OCR_SENSITIVITY = booleanPreferencesKey("high_ocr_sensitivity")
         private val KEY_AUTO_SAVE_BATCHES = booleanPreferencesKey("auto_save_batches")
+
+        val PRESET_CATEGORIES = listOf("Shirts", "Pants", "Shoes", "Accessories", "Outerwear", "Dresses")
     }
 }
 
