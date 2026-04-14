@@ -47,6 +47,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
@@ -103,6 +104,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -1267,6 +1270,7 @@ fun BatchEntryScreen(
     batchEntryViewModel: BatchEntryViewModel
 ) {
     val uiState by batchEntryViewModel.uiState.collectAsState()
+    val categoryOptions by batchEntryViewModel.categoryOptions.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showConfettiPlaceholder by rememberSaveable { mutableStateOf(false) }
     var showSaveChooser by rememberSaveable { mutableStateOf(false) }
@@ -1356,10 +1360,12 @@ fun BatchEntryScreen(
                 items(uiState.drafts, key = { it.localId }) { draft ->
                     BatchDraftEditorCard(
                         draft = draft,
+                        categoryOptions = categoryOptions,
                         onNameChange = { batchEntryViewModel.updateDraft(localId = draft.localId, name = it) },
                         onPriceChange = { batchEntryViewModel.updateDraft(localId = draft.localId, priceInput = it) },
                         onQuantityChange = { batchEntryViewModel.updateDraft(localId = draft.localId, quantityInput = it) },
-                        onCategoryChange = { batchEntryViewModel.updateDraft(localId = draft.localId, category = it) }
+                        onCategoryChange = { batchEntryViewModel.updateDraft(localId = draft.localId, category = it) },
+                        onAddCategory = { newCategory -> batchEntryViewModel.addCustomCategory(newCategory) }
                     )
                 }
             }
@@ -1684,11 +1690,17 @@ private fun CollectionDetailDialog(
 @Composable
 private fun BatchDraftEditorCard(
     draft: BatchDraft,
+    categoryOptions: List<String>,
     onNameChange: (String) -> Unit,
     onPriceChange: (String) -> Unit,
     onQuantityChange: (String) -> Unit,
-    onCategoryChange: (String) -> Unit
+    onCategoryChange: (String) -> Unit,
+    onAddCategory: (String) -> Unit
 ) {
+    var categoryExpanded by rememberSaveable(draft.localId) { mutableStateOf(false) }
+    var showAddCategoryDialog by rememberSaveable(draft.localId) { mutableStateOf(false) }
+    var pendingCategoryName by rememberSaveable(draft.localId) { mutableStateOf("") }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -1736,19 +1748,50 @@ private fun BatchDraftEditorCard(
                     }
                 }
             )
-            OutlinedTextField(
-                value = draft.category,
-                onValueChange = onCategoryChange,
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("Category") }
-            )
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { categoryExpanded = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Category: ${draft.category}")
+                    }
+
+                    OutlinedButton(onClick = { showAddCategoryDialog = true }) {
+                        Icon(imageVector = Icons.Filled.Add, contentDescription = null)
+                        Spacer(modifier = Modifier.size(4.dp))
+                        Text("Add")
+                    }
+                }
+
+                DropdownMenu(
+                    expanded = categoryExpanded,
+                    onDismissRequest = { categoryExpanded = false }
+                ) {
+                    categoryOptions.forEach { category ->
+                        DropdownMenuItem(
+                            text = { Text(category) },
+                            onClick = {
+                                onCategoryChange(category)
+                                categoryExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = draft.priceInput,
                     onValueChange = onPriceChange,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     label = {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1766,10 +1809,50 @@ private fun BatchDraftEditorCard(
                     onValueChange = onQuantityChange,
                     modifier = Modifier.weight(1f),
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     label = { Text("Qty") }
                 )
             }
         }
+    }
+
+    if (showAddCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCategoryDialog = false },
+            title = { Text("Add category") },
+            text = {
+                OutlinedTextField(
+                    value = pendingCategoryName,
+                    onValueChange = { pendingCategoryName = it },
+                    singleLine = true,
+                    label = { Text("Category name") }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val newCategory = pendingCategoryName.trim()
+                        if (newCategory.isNotBlank()) {
+                            onAddCategory(newCategory)
+                            onCategoryChange(newCategory)
+                        }
+                        pendingCategoryName = ""
+                        showAddCategoryDialog = false
+                    },
+                    enabled = pendingCategoryName.trim().isNotBlank()
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingCategoryName = ""
+                    showAddCategoryDialog = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
