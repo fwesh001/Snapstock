@@ -9,12 +9,15 @@ import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
 import com.example.snapstock.data.SettingsRepository
 import com.example.snapstock.data.TodoEntry
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
@@ -55,6 +58,17 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _events = MutableSharedFlow<BatchSaveEvent>()
     val events: SharedFlow<BatchSaveEvent> = _events.asSharedFlow()
+
+    val categoryOptions: StateFlow<List<String>> = combine(
+        settingsRepository.settingsFlow,
+        dao.getAllItems()
+    ) { settings, items ->
+        mergeCategoryOptions(settings, items)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = SettingsRepository.PRESET_CATEGORIES
+    )
 
     private val _shouldShowFirstScanTutorial = MutableStateFlow(
         prefs.getBoolean(KEY_SHOW_FIRST_SCAN_TUTORIAL, true)
@@ -149,18 +163,31 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         quantityInput: String? = null,
         category: String? = null
     ) {
+        val sanitizedPrice = priceInput?.let(::sanitizePriceInput)
+        val sanitizedQuantity = quantityInput?.let(::sanitizeQuantityInput)
+        val sanitizedCategory = category?.trim()?.takeIf { it.isNotBlank() }
+
         _uiState.update { state ->
             state.copy(
                 drafts = state.drafts.map { draft ->
                     if (draft.localId != localId) return@map draft
                     draft.copy(
                         name = name ?: draft.name,
-                        priceInput = priceInput ?: draft.priceInput,
-                        quantityInput = quantityInput ?: draft.quantityInput,
-                        category = category ?: draft.category
+                        priceInput = sanitizedPrice ?: draft.priceInput,
+                        quantityInput = sanitizedQuantity ?: draft.quantityInput,
+                        category = sanitizedCategory ?: draft.category
                     )
                 }
             )
+        }
+    }
+
+    fun addCustomCategory(category: String) {
+        val normalized = category.trim()
+        if (normalized.isBlank()) return
+
+        viewModelScope.launch {
+            settingsRepository.addCustomCategory(normalized)
         }
     }
 
@@ -219,6 +246,46 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     companion object {
         private const val PREFS_NAME = "snapstock_prefs"
         private const val KEY_SHOW_FIRST_SCAN_TUTORIAL = "show_first_scan_tutorial"
+    }
+
+    private fun mergeCategoryOptions(settings: AppSettings, items: List<ClothingItem>): List<String> {
+        val ordered = linkedMapOf<String, String>()
+
+        fun addCategory(raw: String?) {
+            val value = raw?.trim().orEmpty()
+            if (value.isBlank()) return
+            val key = value.lowercase()
+            if (!ordered.containsKey(key)) {
+                ordered[key] = value
+            }
+        }
+
+        SettingsRepository.PRESET_CATEGORIES.forEach(::addCategory)
+        addCategory(settings.defaultCategory)
+        settings.customCategories.forEach(::addCategory)
+        items.forEach { addCategory(it.category) }
+
+        return ordered.values.toList()
+    }
+
+    private fun sanitizePriceInput(raw: String): String {
+        val filtered = raw.filter { it.isDigit() || it == '.' }
+        if (filtered.isEmpty()) return ""
+
+        val firstDotIndex = filtered.indexOf('.')
+        if (firstDotIndex < 0) return filtered
+
+        val head = filtered.substring(0, firstDotIndex + 1)
+        val tail = filtered.substring(firstDotIndex + 1).replace(".", "")
+        return head + tail
+    }
+
+    private fun sanitizeQuantityInput(raw: String): String {
+        val digitsOnly = raw.filter { it.isDigit() }
+        if (digitsOnly.isEmpty()) return ""
+
+        val normalized = digitsOnly.trimStart('0')
+        return normalized
     }
 }
 
