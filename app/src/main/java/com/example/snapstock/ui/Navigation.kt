@@ -63,7 +63,10 @@ fun AppNavHost(navController: NavHostController) {
                 onSearchClick = navigateToSearch,
                 onSettingsClick = navigateToSettings,
                 onCollectionClick = navigateToCollection,
-                onBatchCaptureClick = { navController.navigate(Route.BatchCapture.route) }
+                onBatchCaptureClick = {
+                    batchEntryViewModel.startNewSession()
+                    navController.navigate(Route.BatchCapture.route)
+                }
             )
         }
         composable(Route.Collection.route) {
@@ -80,7 +83,10 @@ fun AppNavHost(navController: NavHostController) {
                 onCollectionClick = navigateToCollection,
                 onSettingsClick = navigateToSettings,
                 onCameraClick = { navController.navigate(Route.SearchCamera.route) },
-                onCreateMysteryItem = { navController.navigate(Route.BatchCapture.route) }
+                onCreateMysteryItem = {
+                    batchEntryViewModel.startNewSession()
+                    navController.navigate(Route.BatchCapture.route)
+                }
             )
         }
         composable(Route.SearchCamera.route) {
@@ -105,6 +111,16 @@ fun AppNavHost(navController: NavHostController) {
         composable(Route.BatchEntry.route) {
             BatchEntryScreen(
                 onBackClick = { navController.popBackStack() },
+                onContinueEditingClick = {
+                    navController.popBackStack(Route.BatchCapture.route, false)
+                },
+                onExitClick = {
+                    batchEntryViewModel.discardSession()
+                    navController.navigate(Route.Dashboard.route) {
+                        popUpTo(Route.Dashboard.route) { inclusive = false }
+                        launchSingleTop = true
+                    }
+                },
                 onSaveComplete = {
                     navController.navigate(Route.Dashboard.route) {
                         popUpTo(Route.Dashboard.route) { inclusive = false }
