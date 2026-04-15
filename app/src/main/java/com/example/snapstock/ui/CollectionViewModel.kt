@@ -11,6 +11,8 @@ import com.example.snapstock.utils.DualEngineSignatureExtractor
 import com.example.snapstock.utils.SignatureCodec
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -30,6 +32,15 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = emptyList()
     )
+
+    val isLoading: StateFlow<Boolean> = dao.getAllItems()
+        .map { false }
+        .onStart { emit(true) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = true
+        )
 
     fun updateItem(item: ClothingItem) {
         viewModelScope.launch {
