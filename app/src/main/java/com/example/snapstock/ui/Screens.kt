@@ -96,6 +96,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -119,8 +120,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
-import com.example.snapstock.ui.MatchBadge
-import com.example.snapstock.ui.RankedMatch
 import com.example.snapstock.utils.ImageSharpness
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
@@ -133,12 +132,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.suspendCancellableCoroutine
-import nl.dionsegijn.konfetti.compose.KonfettiView
-import nl.dionsegijn.konfetti.core.Angle
-import nl.dionsegijn.konfetti.core.Party
-import nl.dionsegijn.konfetti.core.Position
-import nl.dionsegijn.konfetti.core.emitter.Emitter
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1538,29 +1531,61 @@ private fun SnapStockConfetti(
 ) {
     if (!visible) return
 
-    val burstParty = remember {
-        Party(
-            speed = 0f,
-            maxSpeed = 24f,
-            damping = 0.9f,
-            angle = Angle.TOP,
-            spread = 360,
-            colors = listOf(
-                0xFF2E7D32.toInt(),
-                0xFFFFFFFF.toInt()
-            ),
-            emitter = Emitter(duration = 1500, TimeUnit.MILLISECONDS).max(140),
-            position = Position.Relative(0.5, 1.0)
-        )
+    val transition = rememberInfiniteTransition(label = "confettiBurst")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "confettiProgress"
+    )
+    val particles = remember {
+        List(24) { index ->
+            val palette = listOf(
+                Color(0xFF2E7D32),
+                Color(0xFFFFFFFF),
+                Color(0xFF1565C0),
+                Color(0xFFFFC107),
+                Color(0xFFE91E63)
+            )
+            ConfettiParticle(
+                xFraction = ((index * 0.173f) % 1f),
+                startFraction = (index * 0.041f) % 0.18f,
+                drift = 0.12f + (index % 5) * 0.02f,
+                speed = 0.35f + (index % 6) * 0.08f,
+                radius = 4f + (index % 4) * 2.5f,
+                color = palette[index % palette.size]
+            )
+        }
     }
 
     Box(modifier = modifier) {
-        KonfettiView(
-            modifier = Modifier.fillMaxSize(),
-            parties = listOf(burstParty)
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            particles.forEachIndexed { index, particle ->
+                val fallProgress = (progress * particle.speed + index * 0.03f) % 1f
+                val xProgress = (particle.xFraction + progress * particle.drift) % 1f
+                val x = size.width * xProgress
+                val y = size.height * ((particle.startFraction + fallProgress) % 1f)
+                drawCircle(
+                    color = particle.color.copy(alpha = 0.92f),
+                    radius = particle.radius,
+                    center = Offset(x, y)
+                )
+            }
+        }
     }
 }
+
+private data class ConfettiParticle(
+    val xFraction: Float,
+    val startFraction: Float,
+    val drift: Float,
+    val speed: Float,
+    val radius: Float,
+    val color: Color
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
