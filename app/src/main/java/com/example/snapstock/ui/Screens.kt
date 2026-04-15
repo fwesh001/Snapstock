@@ -980,7 +980,7 @@ fun SettingsScreen(
                         onHapticFeedbackChange = settingsViewModel::updateHapticFeedbackEnabled,
                         onOcrSensitivityChange = settingsViewModel::updateHighOcrSensitivity,
                         onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches,
-                        onReducedConfettiEffectsChange = settingsViewModel::updateReducedConfettiEffects,
+                        onReducedConfettiEffectsChange = settingsViewModel::setReducedConfettiEffects,
                         onGreenStockThresholdChange = settingsViewModel::updateGreenStockThreshold,
                         onAmberStockThresholdChange = settingsViewModel::updateAmberStockThreshold
                     )
