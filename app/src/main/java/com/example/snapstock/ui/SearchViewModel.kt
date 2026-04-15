@@ -47,6 +47,7 @@ data class RankedMatch(
 )
 
 data class SearchUiState(
+    val isLoading: Boolean = true,
     val query: String = "",
     val isSearching: Boolean = false,
     val hasSearched: Boolean = false,
@@ -69,6 +70,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     private val query = MutableStateFlow("")
     private val scannedImage = MutableStateFlow<ScannedImageContext?>(null)
     private val allItems = dao.getAllItems()
+    private val isDataReady = allItems
+        .map { true }
+        .onStart { emit(false) }
 
     private val visualWeight = 0.60f
     private val textWeight = 0.40f
@@ -107,8 +111,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         query,
         resultState,
         scannedImage,
-        allItems
-    ) { activeQuery, searchState, activeScannedImage, itemPool ->
+        allItems,
+        isDataReady
+    ) { activeQuery, searchState, activeScannedImage, itemPool, dataReady ->
         val visualMatchResult = findTopVisualMatches(
             items = itemPool,
             sourceSignature = activeScannedImage?.signature,
@@ -118,6 +123,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         val topMatchIds = topMatches.map { it.item.id }.toSet()
 
         SearchUiState(
+            isLoading = !dataReady,
             query = activeQuery,
             isSearching = searchState.isSearching,
             hasSearched = searchState.hasSearched || activeScannedImage != null,
