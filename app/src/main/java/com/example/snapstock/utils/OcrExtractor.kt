@@ -12,6 +12,12 @@ data class OcrResult(
     val extractedPrice: String? = null
 )
 
+data class OcrTextBundle(
+    val fullText: String = "",
+    val tokens: Set<String> = emptySet(),
+    val lines: List<String> = emptyList()
+)
+
 object OcrExtractor {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
@@ -55,6 +61,50 @@ object OcrExtractor {
                 continuation.resume(OcrResult())
             }
         }
+    }
+
+    suspend fun extractTextBundle(bitmap: Bitmap): OcrTextBundle = suspendCancellableCoroutine { continuation ->
+        try {
+            val image = InputImage.fromBitmap(bitmap, 0)
+            recognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    val fullText = visionText.text.orEmpty().trim()
+                    val lines = visionText.textBlocks
+                        .flatMap { block -> block.lines }
+                        .map { it.text.trim() }
+                        .filter { it.isNotBlank() }
+                    val tokens = normalizeTokens(fullText)
+                    if (continuation.isActive) {
+                        continuation.resume(
+                            OcrTextBundle(
+                                fullText = fullText,
+                                tokens = tokens,
+                                lines = lines
+                            )
+                        )
+                    }
+                }
+                .addOnFailureListener {
+                    if (continuation.isActive) {
+                        continuation.resume(OcrTextBundle())
+                    }
+                }
+        } catch (_: Exception) {
+            if (continuation.isActive) {
+                continuation.resume(OcrTextBundle())
+            }
+        }
+    }
+
+    fun normalizeTokens(rawText: String): Set<String> {
+        if (rawText.isBlank()) return emptySet()
+        return rawText.lowercase()
+            .replace("’", "'")
+            .split(Regex("[^a-z0-9$.,]+"))
+            .asSequence()
+            .map { token -> token.trim('.', ',', ' ') }
+            .filter { token -> token.length >= 2 }
+            .toSet()
     }
 }
 
