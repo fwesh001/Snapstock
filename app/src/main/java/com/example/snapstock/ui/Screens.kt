@@ -1011,10 +1011,6 @@ fun BatchCaptureScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        batchEntryViewModel.startNewSession()
-    }
-
     LaunchedEffect(hasCameraPermission, lifecycleOwner) {
         if (hasCameraPermission) {
             cameraController.bindToLifecycle(lifecycleOwner)
@@ -1340,6 +1336,8 @@ private fun FirstScanTutorialOverlay() {
 @Composable
 fun BatchEntryScreen(
     onBackClick: () -> Unit,
+    onContinueEditingClick: () -> Unit,
+    onExitClick: () -> Unit,
     onSaveComplete: () -> Unit,
     batchEntryViewModel: BatchEntryViewModel
 ) {
@@ -1516,7 +1514,7 @@ fun BatchEntryScreen(
                     Button(
                         onClick = {
                             showExitConfirm = false
-                            onBackClick()
+                            onExitClick()
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
@@ -1528,7 +1526,10 @@ fun BatchEntryScreen(
                 },
                 dismissButton = {
                     Button(
-                        onClick = { showExitConfirm = false },
+                        onClick = {
+                            showExitConfirm = false
+                            onContinueEditingClick()
+                        },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1634,6 +1635,7 @@ fun CollectionScreen(
     var selectedCategory by rememberSaveable { mutableStateOf("All") }
     var selectedItem by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
     var isEditing by rememberSaveable { mutableStateOf(false) }
+    var itemPendingDelete by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
     val categories = remember(items) { listOf("All") + items.map { it.category }.distinct().sorted() }
     val filteredItems = remember(items, selectedCategory) {
         if (selectedCategory == "All") items else items.filter { it.category == selectedCategory }
@@ -1708,6 +1710,7 @@ fun CollectionScreen(
                                     selectedItem = item
                                     isEditing = false
                                 },
+                                onDeleteClick = { itemPendingDelete = item },
                                 greenThreshold = settingsState.greenStockThreshold,
                                 amberThreshold = settingsState.amberStockThreshold
                             )
@@ -1744,6 +1747,43 @@ fun CollectionScreen(
                 }
             )
         }
+
+        itemPendingDelete?.let { item ->
+            AlertDialog(
+                onDismissRequest = { itemPendingDelete = null },
+                title = { Text("Delete item?") },
+                text = { Text("Are you sure you want to delete this item?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            collectionViewModel.deleteItem(item)
+                            if (selectedItem?.id == item.id) {
+                                selectedItem = null
+                                isEditing = false
+                            }
+                            itemPendingDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = { itemPendingDelete = null },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -1774,6 +1814,7 @@ private fun CollectionGridCard(
     item: ClothingItem,
     modifier: Modifier,
     onClick: () -> Unit,
+    onDeleteClick: () -> Unit,
     greenThreshold: Int,
     amberThreshold: Int
 ) {
@@ -1806,6 +1847,21 @@ private fun CollectionGridCard(
                         .clip(CircleShape)
                         .background(stockColor)
                 )
+                IconButton(
+                    onClick = onDeleteClick,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "Delete item",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
             Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(item.category, style = MaterialTheme.typography.labelSmall)
