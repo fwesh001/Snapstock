@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -40,6 +42,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = AppSettings()
     )
+
+    val isLoading: StateFlow<Boolean> = settingsRepository.settingsFlow
+        .map { false }
+        .onStart { emit(true) }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = true
+        )
 
     private val _actionState = MutableStateFlow(SettingsActionState())
     val actionState: StateFlow<SettingsActionState> = _actionState
@@ -95,17 +106,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun updateReducedConfettiEffects(enabled: Boolean) {
+    fun setReducedConfettiEffects(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.updateReducedConfettiEffects(enabled)
         }
     }
 
-    fun updateReducedConfettiEffects(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.updateReducedConfettiEffects(enabled)
-        }
-    }
 
     fun compressImages() {
         runMaintenance("Compressing images") {
