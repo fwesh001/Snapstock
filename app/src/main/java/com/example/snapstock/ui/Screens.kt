@@ -94,6 +94,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -130,6 +131,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import nl.dionsegijn.konfetti.compose.KonfettiView
+import nl.dionsegijn.konfetti.core.Angle
+import nl.dionsegijn.konfetti.core.Party
+import nl.dionsegijn.konfetti.core.Position
+import nl.dionsegijn.konfetti.core.emitter.Emitter
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1323,15 +1330,22 @@ fun BatchEntryScreen(
     val uiState by batchEntryViewModel.uiState.collectAsState()
     val categoryOptions by batchEntryViewModel.categoryOptions.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showConfettiPlaceholder by rememberSaveable { mutableStateOf(false) }
-    var showSaveChooser by rememberSaveable { mutableStateOf(false) }
+    var showConfettiBurst by rememberSaveable { mutableStateOf(false) }
+    var showMissingFieldsModal by rememberSaveable { mutableStateOf(false) }
     var showExitConfirm by rememberSaveable { mutableStateOf(false) }
-    val hasIncompleteDrafts = remember(uiState.drafts) {
-        uiState.drafts.any { draft ->
-            draft.name.trim().isBlank() ||
-                draft.category.trim().isBlank() ||
-                draft.priceInput.toDoubleOrNull()?.let { it <= 0.0 } != false ||
-                draft.quantityInput.toIntOrNull()?.let { it <= 0 } != false
+    val missingItemIssues = remember(uiState.drafts) {
+        uiState.drafts.mapIndexedNotNull { index, draft ->
+            val missingFields = buildList {
+                if (draft.name.trim().isBlank()) add("Name")
+                if (draft.category.trim().isBlank()) add("Category")
+                if (draft.priceInput.toDoubleOrNull()?.let { it > 0.0 } != true) add("Price")
+                if (draft.quantityInput.toIntOrNull()?.let { it > 0 } != true) add("Qty")
+            }
+            if (missingFields.isEmpty()) {
+                null
+            } else {
+                "Item ${index + 1}: Missing ${missingFields.joinToString(", ")}" 
+            }
         }
     }
 
@@ -1352,10 +1366,10 @@ fun BatchEntryScreen(
             when (event) {
                 is BatchSaveEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 is BatchSaveEvent.Success -> {
-                    showConfettiPlaceholder = true
+                    showConfettiBurst = true
                     snackbarHostState.showSnackbar("Saved ${event.savedCount} items.")
-                    delay(450)
-                    showConfettiPlaceholder = false
+                    delay(1500)
+                    showConfettiBurst = false
                     onSaveComplete()
                 }
             }
@@ -1376,7 +1390,13 @@ fun BatchEntryScreen(
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         bottomBar = {
             Button(
-                onClick = { showSaveChooser = true },
+                onClick = {
+                    if (missingItemIssues.isEmpty()) {
+                        batchEntryViewModel.saveBatch(createTodo = false)
+                    } else {
+                        showMissingFieldsModal = true
+                    }
+                },
                 enabled = uiState.drafts.isNotEmpty() && !uiState.isSaving,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1394,21 +1414,6 @@ fun BatchEntryScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            if (showConfettiPlaceholder) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                    ) {
-                        Text(
-                            text = "Confetti: Batch saved!",
-                            modifier = Modifier.padding(16.dp),
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
             if (uiState.drafts.isEmpty()) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
@@ -1443,37 +1448,23 @@ fun BatchEntryScreen(
             }
         }
 
-        if (showSaveChooser) {
+        if (showMissingFieldsModal) {
             AlertDialog(
-                onDismissRequest = { showSaveChooser = false },
-                title = { Text("Save batch") },
+                onDismissRequest = { showMissingFieldsModal = false },
+                title = { Text("Complete required fields") },
                 text = {
-                    Text(
-                        if (hasIncompleteDrafts) {
-                            "Some item fields are incomplete. Save as To Do to finish details later."
-                        } else {
-                            "Save this inventory now, or save it and create a To Do for finishing the details later."
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        missingItemIssues.forEach { issue ->
+                            Text(issue)
                         }
-                    )
+                    }
                 },
                 confirmButton = {
-                    Button(onClick = {
-                        showSaveChooser = false
-                        batchEntryViewModel.saveBatch(createTodo = true)
-                    }) {
-                        Text("Save + To Do")
+                    Button(onClick = { showMissingFieldsModal = false }) {
+                        Text("Continue Editing")
                     }
                 },
-                dismissButton = {
-                    if (!hasIncompleteDrafts) {
-                        TextButton(onClick = {
-                            showSaveChooser = false
-                            batchEntryViewModel.saveBatch(createTodo = false)
-                        }) {
-                            Text("Save")
-                        }
-                    }
-                }
+                dismissButton = {}
             )
         }
 
@@ -1509,6 +1500,42 @@ fun BatchEntryScreen(
                 }
             )
         }
+
+        SnapStockConfetti(
+            visible = showConfettiBurst,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
+}
+
+@Composable
+private fun SnapStockConfetti(
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (!visible) return
+
+    val burstParty = remember {
+        Party(
+            speed = 0f,
+            maxSpeed = 24f,
+            damping = 0.9f,
+            angle = Angle.TOP,
+            spread = 360,
+            colors = listOf(
+                Color(0xFF2E7D32).toArgb(),
+                Color(0xFFFFFFFF).toArgb()
+            ),
+            emitter = Emitter(duration = 1500, TimeUnit.MILLISECONDS).max(140),
+            position = Position.Relative(0.5, 1.0)
+        )
+    }
+
+    Box(modifier = modifier) {
+        KonfettiView(
+            modifier = Modifier.fillMaxSize(),
+            parties = listOf(burstParty)
+        )
     }
 }
 
