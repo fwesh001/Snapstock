@@ -10,6 +10,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 object DualEngineSignatureExtractor {
+    private const val COLOR_FEATURE_COUNT = 4
+    private const val HASH_BUCKET_COUNT = 8
+    private const val EMBEDDING_FEATURE_COUNT = COLOR_FEATURE_COUNT + (HASH_BUCKET_COUNT * 2)
+
     suspend fun extractFromImagePath(context: Context, imagePath: String): DualEngineSignature? = withContext(Dispatchers.Default) {
         val bitmap = BitmapFactory.decodeFile(imagePath) ?: return@withContext null
         extractFromBitmap(context, bitmap)
@@ -38,7 +42,7 @@ object DualEngineSignatureExtractor {
     private fun buildVisualEmbedding(bitmap: Bitmap): FloatArray {
         val signature = ImageMatcher.buildSignature(bitmap)
         val color = signature.dominantColor
-        val features = FloatArray(18)
+        val features = FloatArray(EMBEDDING_FEATURE_COUNT)
 
         features[0] = Color.red(color) / 255f
         features[1] = Color.green(color) / 255f
@@ -53,7 +57,10 @@ object DualEngineSignatureExtractor {
     }
 
     private fun fillHashFeatures(target: FloatArray, offset: Int, hash: Long) {
-        for (bucket in 0 until 8) {
+        if (offset >= target.size) return
+
+        val bucketCount = minOf(HASH_BUCKET_COUNT, target.size - offset)
+        for (bucket in 0 until bucketCount) {
             val chunk = ((hash ushr (bucket * 8)) and 0xFFL).toInt()
             target[offset + bucket] = Integer.bitCount(chunk) / 8f
         }
