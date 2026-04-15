@@ -81,6 +81,7 @@ dependencies {
 
     // Lottie
     implementation(libs.lottie.compose)
+    implementation("nl.dionsegijn:konfetti-compose:2.0.4")
 
     // SplashScreen API
     implementation("androidx.core:core-splashscreen:1.0.0")
