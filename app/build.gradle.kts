@@ -72,6 +72,8 @@ dependencies {
     // ML Kit
     implementation(libs.mlkit.text.recognition)
     implementation(libs.mlkit.barcode)
+    implementation("org.tensorflow:tensorflow-lite-task-vision:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
 
     // Image color extraction
     implementation(libs.androidx.palette)
