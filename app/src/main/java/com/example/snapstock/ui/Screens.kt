@@ -122,6 +122,7 @@ import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
 import com.example.snapstock.utils.ImageSharpness
 import com.example.snapstock.utils.OcrExtractor
+import com.example.snapstock.ui.theme.InfoBlue
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Currency
@@ -1343,6 +1344,8 @@ fun BatchEntryScreen(
 ) {
     val uiState by batchEntryViewModel.uiState.collectAsState()
     val categoryOptions by batchEntryViewModel.categoryOptions.collectAsState()
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val settingsState by settingsViewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showConfettiBurst by rememberSaveable { mutableStateOf(false) }
     var showMissingFieldsModal by rememberSaveable { mutableStateOf(false) }
@@ -1543,6 +1546,7 @@ fun BatchEntryScreen(
 
         SnapStockConfetti(
             visible = showConfettiBurst,
+            reducedEffects = settingsState.reducedConfettiEffects,
             modifier = Modifier.fillMaxSize()
         )
     }
@@ -1551,6 +1555,7 @@ fun BatchEntryScreen(
 @Composable
 private fun SnapStockConfetti(
     visible: Boolean,
+    reducedEffects: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     if (!visible) return
@@ -1560,35 +1565,36 @@ private fun SnapStockConfetti(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200),
+            animation = tween(durationMillis = if (reducedEffects) 900 else 1500),
             repeatMode = RepeatMode.Restart
         ),
         label = "confettiProgress"
     )
     val primaryColor = MaterialTheme.colorScheme.primary
-    val secondaryColor = MaterialTheme.colorScheme.secondary
-    val tertiaryColor = MaterialTheme.colorScheme.tertiary
     val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+    val accentColor = InfoBlue
 
     val particles = remember(
         primaryColor,
-        secondaryColor,
-        tertiaryColor,
-        onPrimaryColor
+        onPrimaryColor,
+        accentColor,
+        reducedEffects
     ) {
         val palette = listOf(
             primaryColor,
-            secondaryColor,
-            tertiaryColor,
+            onPrimaryColor,
+            accentColor,
             onPrimaryColor
         )
-        List(58) { index ->
+        val particleCount = if (reducedEffects) 24 else 56
+        List(particleCount) { index ->
+            val fromLeft = index % 2 == 0
             ConfettiParticle(
-                xFraction = ((index * 0.151f) % 1f),
-                startFraction = (index * 0.019f) % 0.16f,
-                drift = if (index % 2 == 0) 0.10f + (index % 5) * 0.018f else -0.08f - (index % 4) * 0.014f,
-                speed = 0.52f + (index % 7) * 0.07f,
-                radius = 4.5f + (index % 5) * 2.2f,
+                xFraction = if (fromLeft) 0.10f + (index % 4) * 0.035f else 0.90f - (index % 4) * 0.035f,
+                startFraction = (index * 0.018f) % 0.10f,
+                drift = if (fromLeft) 0.26f + (index % 5) * 0.02f else -0.26f - (index % 5) * 0.02f,
+                speed = if (reducedEffects) 0.42f + (index % 4) * 0.05f else 0.60f + (index % 6) * 0.06f,
+                radius = if (reducedEffects) 3.8f + (index % 3) * 1.3f else 4.6f + (index % 5) * 2.0f,
                 color = palette[index % palette.size]
             )
         }
