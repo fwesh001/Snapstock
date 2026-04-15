@@ -1364,6 +1364,8 @@ fun BatchEntryScreen(
             }
         }
     }
+    val incompleteCount = missingItemIssues.size
+    val totalCount = uiState.drafts.size
 
     fun requestExitBatchEntry() {
         if (uiState.drafts.isNotEmpty()) {
@@ -1383,7 +1385,12 @@ fun BatchEntryScreen(
                 is BatchSaveEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 is BatchSaveEvent.Success -> {
                     showConfettiBurst = true
-                    snackbarHostState.showSnackbar("Saved ${event.savedCount} items.")
+                    val message = if (event.todoCount > 0) {
+                        "Saved ${event.savedCount} items. ${event.todoCount} need follow-up."
+                    } else {
+                        "Saved ${event.savedCount} items."
+                    }
+                    snackbarHostState.showSnackbar(message)
                     delay(1500)
                     showConfettiBurst = false
                     onSaveComplete()
@@ -1443,11 +1450,20 @@ fun BatchEntryScreen(
             } else {
                 item {
                     Text(
-                        text = "${uiState.drafts.size} items to complete",
+                        text = "$incompleteCount/$totalCount items incomplete",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center
+                    )
+                }
+                item {
+                    Text(
+                        text = "${uiState.drafts.size} items to complete",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 items(uiState.drafts, key = { it.localId }) { draft ->
@@ -1480,7 +1496,14 @@ fun BatchEntryScreen(
                         Text("Continue Editing")
                     }
                 },
-                dismissButton = {}
+                dismissButton = {
+                    Button(onClick = {
+                        showMissingFieldsModal = false
+                        batchEntryViewModel.saveBatchWithTodo()
+                    }) {
+                        Text("Save + To-Do")
+                    }
+                }
             )
         }
 
@@ -1541,21 +1564,30 @@ private fun SnapStockConfetti(
         ),
         label = "confettiProgress"
     )
-    val particles = remember {
-        List(24) { index ->
-            val palette = listOf(
-                Color(0xFF2E7D32),
-                Color(0xFFFFFFFF),
-                Color(0xFF1565C0),
-                Color(0xFFFFC107),
-                Color(0xFFE91E63)
-            )
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val secondaryColor = MaterialTheme.colorScheme.secondary
+    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+
+    val particles = remember(
+        primaryColor,
+        secondaryColor,
+        tertiaryColor,
+        onPrimaryColor
+    ) {
+        val palette = listOf(
+            primaryColor,
+            secondaryColor,
+            tertiaryColor,
+            onPrimaryColor
+        )
+        List(58) { index ->
             ConfettiParticle(
-                xFraction = ((index * 0.173f) % 1f),
-                startFraction = (index * 0.041f) % 0.18f,
-                drift = 0.12f + (index % 5) * 0.02f,
-                speed = 0.35f + (index % 6) * 0.08f,
-                radius = 4f + (index % 4) * 2.5f,
+                xFraction = ((index * 0.151f) % 1f),
+                startFraction = (index * 0.019f) % 0.16f,
+                drift = if (index % 2 == 0) 0.10f + (index % 5) * 0.018f else -0.08f - (index % 4) * 0.014f,
+                speed = 0.52f + (index % 7) * 0.07f,
+                radius = 4.5f + (index % 5) * 2.2f,
                 color = palette[index % palette.size]
             )
         }
@@ -1564,10 +1596,10 @@ private fun SnapStockConfetti(
     Box(modifier = modifier) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             particles.forEachIndexed { index, particle ->
-                val fallProgress = (progress * particle.speed + index * 0.03f) % 1f
+                val travelProgress = (progress * particle.speed + index * 0.028f) % 1f
                 val xProgress = (particle.xFraction + progress * particle.drift) % 1f
                 val x = size.width * xProgress
-                val y = size.height * ((particle.startFraction + fallProgress) % 1f)
+                val y = size.height * (1f - ((particle.startFraction + travelProgress) % 1f))
                 drawCircle(
                     color = particle.color.copy(alpha = 0.92f),
                     radius = particle.radius,
