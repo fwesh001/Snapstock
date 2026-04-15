@@ -79,7 +79,8 @@ fun AppNavHost(navController: NavHostController) {
                 onHomeClick = navigateToDashboard,
                 onCollectionClick = navigateToCollection,
                 onSettingsClick = navigateToSettings,
-                onCameraClick = { navController.navigate(Route.SearchCamera.route) }
+                onCameraClick = { navController.navigate(Route.SearchCamera.route) },
+                onCreateMysteryItem = { navController.navigate(Route.BatchCapture.route) }
             )
         }
         composable(Route.SearchCamera.route) {
