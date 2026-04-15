@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 
 class CollectionViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = AppDatabase.getDatabase(application).clothingItemDao()
@@ -44,6 +45,13 @@ class CollectionViewModel(application: Application) : AndroidViewModel(applicati
                 signatureVersion = signature?.signatureVersion ?: CURRENT_SIGNATURE_VERSION
             )
             dao.updateItem(indexed)
+        }
+    }
+
+    fun deleteItem(item: ClothingItem) {
+        viewModelScope.launch {
+            dao.deleteItem(item)
+            runCatching { File(item.imagePath).delete() }
         }
     }
 }
