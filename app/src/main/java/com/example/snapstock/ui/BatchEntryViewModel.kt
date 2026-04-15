@@ -9,6 +9,9 @@ import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
 import com.example.snapstock.data.SettingsRepository
 import com.example.snapstock.data.TodoEntry
+import com.example.snapstock.utils.CURRENT_SIGNATURE_VERSION
+import com.example.snapstock.utils.DualEngineSignatureExtractor
+import com.example.snapstock.utils.SignatureCodec
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -198,30 +201,36 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
             viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Capture at least one item first.")) }
             return
         }
-
-        val now = System.currentTimeMillis()
-        val entities = mutableListOf<ClothingItem>()
-
-        for (draft in state.drafts) {
-            val name = draft.name.trim().ifBlank { "Pending Item ${draft.localId}" }
-            val price = draft.priceInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
-            val quantity = draft.quantityInput.toIntOrNull()?.takeIf { it > 0 } ?: 1
-
-            entities += ClothingItem(
-                name = name,
-                price = price,
-                quantity = quantity,
-                category = draft.category,
-                imagePath = draft.imagePath,
-                patternHash = null,
-                dateAdded = now
-            )
-        }
-
         _uiState.update { it.copy(isSaving = true) }
 
         viewModelScope.launch {
             try {
+                val now = System.currentTimeMillis()
+                val appContext = getApplication<Application>().applicationContext
+                val entities = state.drafts.map { draft ->
+                    val signature = runCatching {
+                        DualEngineSignatureExtractor.extractFromImagePath(appContext, draft.imagePath)
+                    }.getOrNull()
+
+                    val name = draft.name.trim().ifBlank { "Pending Item ${draft.localId}" }
+                    val price = draft.priceInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
+                    val quantity = draft.quantityInput.toIntOrNull()?.takeIf { it > 0 } ?: 1
+
+                    ClothingItem(
+                        name = name,
+                        price = price,
+                        quantity = quantity,
+                        category = draft.category,
+                        imagePath = draft.imagePath,
+                        patternHash = null,
+                        visualEmbedding = SignatureCodec.encodeEmbedding(signature?.embedding),
+                        ocrText = signature?.ocrText?.takeIf { it.isNotBlank() },
+                        ocrTokens = SignatureCodec.encodeTokens(signature?.ocrTokens ?: emptySet()),
+                        signatureVersion = signature?.signatureVersion ?: CURRENT_SIGNATURE_VERSION,
+                        dateAdded = now
+                    )
+                }
+
                 val insertedIds = dao.insertItems(entities).map { it.toInt() }
                 if (createTodo) {
                     todoDao.insertTodoEntry(
