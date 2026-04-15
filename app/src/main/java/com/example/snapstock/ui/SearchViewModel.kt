@@ -1,13 +1,14 @@
 package com.example.snapstock.ui
 
 import android.app.Application
-import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.snapstock.data.AppDatabase
 import com.example.snapstock.data.ClothingItem
-import com.example.snapstock.utils.ImageMatcher
-import com.example.snapstock.utils.ImageSignature
+import com.example.snapstock.utils.DualEngineSignature
+import com.example.snapstock.utils.DualEngineSignatureExtractor
+import com.example.snapstock.utils.OcrExtractor
+import com.example.snapstock.utils.SignatureCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -27,14 +28,28 @@ import kotlinx.coroutines.withContext
 
 data class ScannedImageContext(
     val imagePath: String,
-    val signature: ImageSignature
+    val signature: DualEngineSignature
+)
+
+enum class MatchBadge {
+    PatternMatch,
+    TagMatch,
+    DualMatch
+}
+
+data class RankedMatch(
+    val item: ClothingItem,
+    val combinedScore: Float,
+    val visualScore: Float,
+    val textScore: Float,
+    val badge: MatchBadge
 )
 
 data class SearchUiState(
     val query: String = "",
     val isSearching: Boolean = false,
     val hasSearched: Boolean = false,
-    val topMatches: List<ClothingItem> = emptyList(),
+    val topMatches: List<RankedMatch> = emptyList(),
     val results: List<ClothingItem> = emptyList(),
     val scannedImage: ScannedImageContext? = null,
     val visualMatchConfidence: Float = 0f
@@ -54,10 +69,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     private val scannedImage = MutableStateFlow<ScannedImageContext?>(null)
     private val allItems = dao.getAllItems()
 
-    private val signatureCache = mutableMapOf<String, ImageSignature?>()
-    private val cacheLock = Any()
-    private val visualMatchConfidenceThreshold = 0.58f
-    private val visualMatchSeparationThreshold = 0.06f
+    private val visualWeight = 0.60f
+    private val textWeight = 0.40f
+    private val combinedThreshold = 0.58f
+    private val singleEngineThreshold = 0.78f
 
     private val resultState = query
         .debounce(250)
@@ -95,7 +110,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     ) { activeQuery, searchState, activeScannedImage, itemPool ->
         val visualMatchResult = findTopVisualMatches(itemPool, activeScannedImage?.signature)
         val topMatches = visualMatchResult.matches
-        val topMatchIds = topMatches.map { it.id }.toSet()
+        val topMatchIds = topMatches.map { it.item.id }.toSet()
 
         SearchUiState(
             query = activeQuery,
@@ -116,10 +131,12 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         query.update { newQuery }
     }
 
-    fun onImageScanned(imagePath: String) {
-        val signature = ImageMatcher.buildSignature(imagePath) ?: return
+    suspend fun onImageScanned(imagePath: String): Boolean {
+        val appContext = getApplication<Application>().applicationContext
+        val signature = DualEngineSignatureExtractor.extractFromImagePath(appContext, imagePath) ?: return false
         query.value = ""
         scannedImage.value = ScannedImageContext(imagePath = imagePath, signature = signature)
+        return true
     }
 
     fun clearImageContext() {
@@ -128,72 +145,88 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun findTopVisualMatches(
         items: List<ClothingItem>,
-        sourceSignature: ImageSignature?
+        sourceSignature: DualEngineSignature?
     ): VisualMatchResult {
         if (sourceSignature == null) return VisualMatchResult()
 
         return withContext(Dispatchers.Default) {
             val candidates = items.mapNotNull { item ->
-                val signature = resolveSignature(item.imagePath) ?: return@mapNotNull null
-                val aHashDist = ImageMatcher.hammingDistance(sourceSignature.averageHash, signature.averageHash)
-                val pHashDist = ImageMatcher.hammingDistance(sourceSignature.perceptualHash, signature.perceptualHash)
-                val colorDist = ImageMatcher.colorDistance(sourceSignature.dominantColor, signature.dominantColor)
-                val aHashScore = aHashDist / 64f
-                val pHashScore = pHashDist / 64f
-                val colorScore = colorDist / 765f
-                val score = (aHashScore * 0.32f) + (pHashScore * 0.48f) + (colorScore * 0.20f)
-                val confidence = 1f - score.coerceIn(0f, 1f)
-                VisualMatchCandidate(item = item, score = score, confidence = confidence)
+                val signature = resolveSignature(item) ?: return@mapNotNull null
+                val visualScore = SignatureCodec.cosineSimilarity(sourceSignature.embedding, signature.embedding)
+                val textScore = SignatureCodec.tokenSimilarity(sourceSignature.ocrTokens, signature.ocrTokens)
+                val combinedScore = (visualScore * visualWeight) + (textScore * textWeight)
+                val qualifies = combinedScore >= combinedThreshold ||
+                    visualScore >= singleEngineThreshold ||
+                    textScore >= singleEngineThreshold
+                if (!qualifies) return@mapNotNull null
+
+                VisualMatchCandidate(
+                    item = item,
+                    combinedScore = combinedScore,
+                    visualScore = visualScore,
+                    textScore = textScore,
+                    badge = determineBadge(visualScore = visualScore, textScore = textScore)
+                )
             }
 
-            val best = candidates.minByOrNull { it.score } ?: return@withContext VisualMatchResult()
-            val sortedCandidates = candidates.sortedBy { it.score }
-            val secondBest = sortedCandidates.getOrNull(1)
-            val separation = secondBest?.let { it.score - best.score } ?: visualMatchSeparationThreshold
+            val sortedCandidates = candidates.sortedByDescending { it.combinedScore }
+            val matches = sortedCandidates.take(8)
+                .map {
+                    RankedMatch(
+                        item = it.item,
+                        combinedScore = it.combinedScore,
+                        visualScore = it.visualScore,
+                        textScore = it.textScore,
+                        badge = it.badge
+                    )
+                }
 
-            if (best.confidence < visualMatchConfidenceThreshold) {
-                return@withContext VisualMatchResult(confidence = best.confidence)
-            }
-            if (separation < visualMatchSeparationThreshold) {
-                return@withContext VisualMatchResult(confidence = best.confidence)
-            }
-
-            val matches = sortedCandidates
-                .take(8)
-                .map { it.item }
-
-            VisualMatchResult(matches = matches, confidence = best.confidence)
+            VisualMatchResult(
+                matches = matches,
+                confidence = matches.firstOrNull()?.combinedScore ?: 0f
+            )
         }
     }
 
-    private fun resolveSignature(imagePath: String): ImageSignature? {
-        val cacheKey = buildSignatureCacheKey(imagePath)
-        synchronized(cacheLock) {
-            if (signatureCache.containsKey(cacheKey)) {
-                return signatureCache[cacheKey]
-            }
+    private fun resolveSignature(item: ClothingItem): DualEngineSignature? {
+        val embedded = SignatureCodec.decodeEmbedding(item.visualEmbedding)
+        val tokenSet = SignatureCodec.decodeTokens(item.ocrTokens)
+        if (embedded != null || tokenSet.isNotEmpty() || !item.ocrText.isNullOrBlank()) {
+            return DualEngineSignature(
+                embedding = embedded,
+                ocrText = item.ocrText.orEmpty(),
+                ocrTokens = tokenSet,
+                signatureVersion = item.signatureVersion
+            )
         }
 
-        val computed = ImageMatcher.buildSignature(imagePath)
-        synchronized(cacheLock) {
-            signatureCache[cacheKey] = computed
-        }
-        return computed
+        val fallbackTokens = OcrExtractor.normalizeTokens(item.name + " " + item.category)
+        return DualEngineSignature(
+            embedding = null,
+            ocrText = "${item.name} ${item.category}",
+            ocrTokens = fallbackTokens,
+            signatureVersion = item.signatureVersion
+        )
     }
 
-    private fun buildSignatureCacheKey(imagePath: String): String {
-        val file = File(imagePath)
-        return "${file.absolutePath}:${file.lastModified()}:${file.length()}"
+    private fun determineBadge(visualScore: Float, textScore: Float): MatchBadge {
+        return when {
+            visualScore >= 0.68f && textScore < 0.2f -> MatchBadge.PatternMatch
+            textScore >= 0.68f && visualScore < 0.2f -> MatchBadge.TagMatch
+            else -> MatchBadge.DualMatch
+        }
     }
 
     private data class VisualMatchCandidate(
         val item: ClothingItem,
-        val score: Float,
-        val confidence: Float
+        val combinedScore: Float,
+        val visualScore: Float,
+        val textScore: Float,
+        val badge: MatchBadge
     )
 
     private data class VisualMatchResult(
-        val matches: List<ClothingItem> = emptyList(),
+        val matches: List<RankedMatch> = emptyList(),
         val confidence: Float = 0f
     )
 }
