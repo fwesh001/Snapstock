@@ -640,7 +640,7 @@ fun SearchScreen(
                                 )
                             ) {
                                 Text("Create New Item")
-                            )
+                            }
                         }
                     }
                 }
