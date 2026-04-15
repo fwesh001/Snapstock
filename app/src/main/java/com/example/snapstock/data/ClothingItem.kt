@@ -13,6 +13,10 @@ data class ClothingItem(
     val category: String,
     val imagePath: String,
     val patternHash: String?,
+    val visualEmbedding: String? = null,
+    val ocrText: String? = null,
+    val ocrTokens: String? = null,
+    val signatureVersion: Int = 1,
     val dateAdded: Long
 )
 
