@@ -95,7 +95,13 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun startNewSession() {
-        commitLastRemoval()
+        discardSessionFiles()
+        nextLocalId = 1
+        _uiState.value = BatchEntryUiState()
+    }
+
+    fun discardSession() {
+        discardSessionFiles()
         nextLocalId = 1
         _uiState.value = BatchEntryUiState()
     }
@@ -264,11 +270,12 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
             try {
                 val now = System.currentTimeMillis()
                 val appContext = getApplication<Application>().applicationContext
-                val completeDrafts = state.drafts.filter(::isDraftComplete)
-                val incompleteDrafts = state.drafts.filterNot(::isDraftComplete)
+                val incompleteDraftIndices = state.drafts.mapIndexedNotNull { index, draft ->
+                    if (isDraftComplete(draft)) null else index
+                }
 
                 val entities = buildList {
-                    completeDrafts.forEach { draft ->
+                    state.drafts.forEach { draft ->
                         add(buildIndexedItem(appContext, draft, now))
                     }
                 }
@@ -279,11 +286,13 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
                     emptyList()
                 }
 
-                if (incompleteDrafts.isNotEmpty()) {
+                val incompleteItemIds = incompleteDraftIndices.mapNotNull { index -> insertedIds.getOrNull(index) }
+
+                if (incompleteItemIds.isNotEmpty()) {
                     todoDao.insertTodoEntry(
                         TodoEntry(
-                            title = buildTodoTitle(incompleteDrafts),
-                            itemIdsCsv = insertedIds.joinToString(","),
+                            title = "Complete batch details",
+                            itemIdsCsv = incompleteItemIds.joinToString(","),
                             createdAt = now,
                             completed = false
                         )
@@ -295,7 +304,7 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
                 _events.emit(
                     BatchSaveEvent.Success(
                         savedCount = entities.size,
-                        todoCount = incompleteDrafts.size
+                        todoCount = incompleteItemIds.size
                     )
                 )
             } catch (_: Exception) {
@@ -383,25 +392,22 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         )
     }
 
-    private fun buildTodoTitle(incompleteDrafts: List<BatchDraft>): String {
-        val summary = incompleteDrafts.joinToString(separator = ", ") { draft ->
-            val missingFields = buildList {
-                if (draft.name.trim().isBlank()) add("Name")
-                if (draft.category.trim().isBlank()) add("Category")
-                if (draft.priceInput.toDoubleOrNull()?.let { it > 0.0 } != true) add("Price")
-                if (draft.quantityInput.toIntOrNull()?.let { it > 0 } != true) add("Qty")
-            }
-            "Item ${draft.localId}: Missing ${missingFields.joinToString(", ")}"
-        }
-
-        return "Complete batch details — $summary"
-    }
-
     private suspend fun extractSignatureSafely(context: Context, imagePath: String) =
         try {
             DualEngineSignatureExtractor.extractFromImagePath(context, imagePath)
         } catch (_: Exception) {
             null
         }
+
+    private fun discardSessionFiles() {
+        val state = _uiState.value
+        state.drafts.forEach { draft ->
+            runCatching { File(draft.imagePath).delete() }
+        }
+        pendingRemoval?.let { pending ->
+            runCatching { File(pending.draft.imagePath).delete() }
+            pendingRemoval = null
+        }
+    }
 }
 
