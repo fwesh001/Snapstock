@@ -12,6 +12,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -57,6 +58,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.FlashOff
+import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -705,6 +708,7 @@ fun SearchCameraScreen(
         )
     }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
+    var torchEnabled by rememberSaveable { mutableStateOf(false) }
 
     val cameraController = remember(context) {
         LifecycleCameraController(context).apply {
@@ -786,6 +790,29 @@ fun SearchCameraScreen(
                         text = if (isCapturing) "Scanning..." else "Tap shutter to scan",
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                         style = MaterialTheme.typography.labelLarge
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        if (!hasCameraPermission) {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            return@IconButton
+                        }
+                        torchEnabled = !torchEnabled
+                        cameraController.enableTorch(torchEnabled)
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f))
+                ) {
+                    Icon(
+                        imageVector = if (torchEnabled) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
+                        contentDescription = if (torchEnabled) "Flash on" else "Flash off",
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -933,6 +960,7 @@ fun BatchCaptureScreen(
         )
     }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
+    var torchEnabled by rememberSaveable { mutableStateOf(false) }
     var previewImageIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var isAwaitingUndo by rememberSaveable { mutableStateOf(false) }
 
@@ -1124,6 +1152,29 @@ fun BatchCaptureScreen(
                     FirstScanTutorialOverlay()
                 }
 
+                IconButton(
+                    onClick = {
+                        if (!hasCameraPermission) {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            return@IconButton
+                        }
+                        torchEnabled = !torchEnabled
+                        cameraController.enableTorch(torchEnabled)
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 16.dp, end = 16.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.78f))
+                ) {
+                    Icon(
+                        imageVector = if (torchEnabled) Icons.Filled.FlashOn else Icons.Filled.FlashOff,
+                        contentDescription = if (torchEnabled) "Flash on" else "Flash off",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -1274,6 +1325,27 @@ fun BatchEntryScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showConfettiPlaceholder by rememberSaveable { mutableStateOf(false) }
     var showSaveChooser by rememberSaveable { mutableStateOf(false) }
+    var showExitConfirm by rememberSaveable { mutableStateOf(false) }
+    val hasIncompleteDrafts = remember(uiState.drafts) {
+        uiState.drafts.any { draft ->
+            draft.name.trim().isBlank() ||
+                draft.category.trim().isBlank() ||
+                draft.priceInput.toDoubleOrNull()?.let { it <= 0.0 } != false ||
+                draft.quantityInput.toIntOrNull()?.let { it <= 0 } != false
+        }
+    }
+
+    fun requestExitBatchEntry() {
+        if (uiState.drafts.isNotEmpty()) {
+            showExitConfirm = true
+        } else {
+            onBackClick()
+        }
+    }
+
+    BackHandler {
+        requestExitBatchEntry()
+    }
 
     LaunchedEffect(Unit) {
         batchEntryViewModel.events.collect { event ->
@@ -1295,7 +1367,7 @@ fun BatchEntryScreen(
             CenterAlignedTopAppBar(
                 title = { Text(text = "Batch Entry") },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(onClick = { requestExitBatchEntry() }) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -1375,7 +1447,15 @@ fun BatchEntryScreen(
             AlertDialog(
                 onDismissRequest = { showSaveChooser = false },
                 title = { Text("Save batch") },
-                text = { Text("Save this inventory now, or save it and create a To Do for finishing the details later.") },
+                text = {
+                    Text(
+                        if (hasIncompleteDrafts) {
+                            "Some item fields are incomplete. Save as To Do to finish details later."
+                        } else {
+                            "Save this inventory now, or save it and create a To Do for finishing the details later."
+                        }
+                    )
+                },
                 confirmButton = {
                     Button(onClick = {
                         showSaveChooser = false
@@ -1385,11 +1465,46 @@ fun BatchEntryScreen(
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = {
-                        showSaveChooser = false
-                        batchEntryViewModel.saveBatch(createTodo = false)
-                    }) {
-                        Text("Save")
+                    if (!hasIncompleteDrafts) {
+                        TextButton(onClick = {
+                            showSaveChooser = false
+                            batchEntryViewModel.saveBatch(createTodo = false)
+                        }) {
+                            Text("Save")
+                        }
+                    }
+                }
+            )
+        }
+
+        if (showExitConfirm) {
+            AlertDialog(
+                onDismissRequest = { showExitConfirm = false },
+                title = { Text("Exit Batch Entry?") },
+                text = { Text("Exit Batch Entry? Your captured photos will be lost.") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showExitConfirm = false
+                            onBackClick()
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text("Exit")
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = { showExitConfirm = false },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("Continue Editing")
                     }
                 }
             )
@@ -1661,8 +1776,20 @@ private fun CollectionDetailDialog(
                         OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
                         OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("Category") }, modifier = Modifier.fillMaxWidth())
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("Price") }, modifier = Modifier.weight(1f))
-                            OutlinedTextField(value = quantity, onValueChange = { quantity = it }, label = { Text("Qty") }, modifier = Modifier.weight(1f))
+                            OutlinedTextField(
+                                value = price,
+                                onValueChange = { price = sanitizePriceInputForField(it) },
+                                label = { Text("Price") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            OutlinedTextField(
+                                value = quantity,
+                                onValueChange = { quantity = sanitizeQuantityInputForField(it) },
+                                label = { Text("Qty") },
+                                modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { retakeLauncher.launch(null) }) { Text("Retake") }
@@ -2508,6 +2635,25 @@ private fun normalizePriceInput(rawPrice: String?): String {
     if (rawPrice.isNullOrBlank()) return ""
     val match = Regex("""\d+(?:[.,]\d{1,2})?""").find(rawPrice) ?: return ""
     return match.value.replace(',', '.')
+}
+
+private fun sanitizePriceInputForField(raw: String): String {
+    val filtered = raw.filter { it.isDigit() || it == '.' }
+    if (filtered.isEmpty()) return ""
+
+    val firstDotIndex = filtered.indexOf('.')
+    if (firstDotIndex < 0) return filtered
+
+    val head = filtered.substring(0, firstDotIndex + 1)
+    val tail = filtered.substring(firstDotIndex + 1).replace(".", "")
+    return head + tail
+}
+
+private fun sanitizeQuantityInputForField(raw: String): String {
+    val digitsOnly = raw.filter { it.isDigit() }
+    if (digitsOnly.isEmpty()) return ""
+
+    return digitsOnly.trimStart('0')
 }
 
 @Composable
