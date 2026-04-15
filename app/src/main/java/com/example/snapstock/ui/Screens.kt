@@ -956,6 +956,7 @@ fun SettingsScreen(
                     onHapticFeedbackChange = settingsViewModel::updateHapticFeedbackEnabled,
                     onOcrSensitivityChange = settingsViewModel::updateHighOcrSensitivity,
                     onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches,
+                    onReducedConfettiEffectsChange = settingsViewModel::updateReducedConfettiEffects,
                     onGreenStockThresholdChange = settingsViewModel::updateGreenStockThreshold,
                     onAmberStockThresholdChange = settingsViewModel::updateAmberStockThreshold
                 )
@@ -2670,6 +2671,7 @@ private fun PerformanceTab(
     onHapticFeedbackChange: (Boolean) -> Unit,
     onOcrSensitivityChange: (Boolean) -> Unit,
     onAutoSaveBatchesChange: (Boolean) -> Unit,
+    onReducedConfettiEffectsChange: (Boolean) -> Unit,
     onGreenStockThresholdChange: (Int) -> Unit,
     onAmberStockThresholdChange: (Int) -> Unit
 ) {
@@ -2685,6 +2687,7 @@ private fun PerformanceTab(
         SettingToggleRow("Haptic Feedback", settings.hapticFeedbackEnabled, onHapticFeedbackChange)
         SettingToggleRow("OCR Sensitivity (High)", settings.highOcrSensitivity, onOcrSensitivityChange)
         SettingToggleRow("Auto-Save Batches", settings.autoSaveBatches, onAutoSaveBatchesChange)
+        SettingToggleRow("Reduced Confetti", settings.reducedConfettiEffects, onReducedConfettiEffectsChange)
 
         Text(text = "Stock thresholds", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         OutlinedTextField(
