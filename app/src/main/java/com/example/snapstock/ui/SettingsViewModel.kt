@@ -101,6 +101,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun updateReducedConfettiEffects(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.updateReducedConfettiEffects(enabled)
+        }
+    }
+
     fun compressImages() {
         runMaintenance("Compressing images") {
             actionsRepository.compressStoredImages()
