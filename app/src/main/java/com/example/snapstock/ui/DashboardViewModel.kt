@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
 data class DashboardUiState(
+    val isLoading: Boolean = true,
     val totalItems: Int = 0,
     val lowStockCount: Int = 0,
     val totalInventoryValue: Double = 0.0,
@@ -31,6 +32,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         todoDao.getPendingTodos()
     ) { items, lastAddedItem, pendingTodos ->
         DashboardUiState(
+            isLoading = false,
             totalItems = items.size,
             lowStockCount = items.count { it.quantity <= 5 },
             totalInventoryValue = items.sumOf { it.price * it.quantity },
