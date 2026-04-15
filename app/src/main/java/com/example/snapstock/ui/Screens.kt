@@ -198,20 +198,24 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
-            item {
-                StatsRow(
-                    totalItems = uiState.totalItems,
-                    lowStockCount = uiState.lowStockCount,
-                    totalInventoryValue = uiState.totalInventoryValue,
-                    currencyCode = settingsState.currencyCode
-                )
-            }
+            if (uiState.isLoading) {
+                item { DashboardShimmer() }
+            } else {
+                item {
+                    StatsRow(
+                        totalItems = uiState.totalItems,
+                        lowStockCount = uiState.lowStockCount,
+                        totalInventoryValue = uiState.totalInventoryValue,
+                        currencyCode = settingsState.currencyCode
+                    )
+                }
 
-            item {
-                LastActionCard(
-                    uiState = uiState,
-                    currencyCode = settingsState.currencyCode
-                )
+                item {
+                    LastActionCard(
+                        uiState = uiState,
+                        currencyCode = settingsState.currencyCode
+                    )
+                }
             }
 
             if (uiState.pendingTodos.isNotEmpty()) {
@@ -642,12 +646,16 @@ fun SearchScreen(
 
             if (uiState.scannedImage == null) {
                 when {
+                    uiState.isLoading -> {
+                        item { SearchShimmer() }
+                    }
+
                     uiState.query.isBlank() && uiState.scannedImage == null -> {
                         item { SearchPromptCard() }
                     }
 
                     uiState.isSearching -> {
-                        item { SearchLoadingCard() }
+                        item { SearchShimmer() }
                     }
 
                     uiState.hasSearched && uiState.results.isEmpty() && uiState.topMatches.isEmpty() -> {
@@ -699,6 +707,11 @@ fun SearchScreen(
                     val updated = item.copy(imagePath = updatedPath)
                     selectedItem = updated
                     collectionViewModel.updateItem(updated)
+                },
+                onDelete = {
+                    collectionViewModel.deleteItem(item)
+                    selectedItem = null
+                    isEditing = false
                 }
             )
         }
@@ -913,6 +926,14 @@ fun SettingsScreen(
     var selectedTabIndex by rememberSaveable { mutableStateOf(0) }
     val settingsViewModel: SettingsViewModel = viewModel()
     val settingsState by settingsViewModel.uiState.collectAsState()
+    val settingsLoading by settingsViewModel.isLoading.collectAsState()
+    var isTabSwitchLoading by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(selectedTabIndex) {
+        isTabSwitchLoading = true
+        delay(120)
+        isTabSwitchLoading = false
+    }
 
     Scaffold(
         topBar = {
@@ -944,23 +965,27 @@ fun SettingsScreen(
                 }
             }
 
-            when (selectedTabIndex) {
-                0 -> PersonalizationTab(
-                    settings = settingsState,
-                    onShopNameChange = settingsViewModel::updateShopName,
-                    onCurrencyChange = settingsViewModel::updateCurrencyCode,
-                    onDefaultCategoryChange = settingsViewModel::updateDefaultCategory
-                )
-                1 -> PerformanceTab(
-                    settings = settingsState,
-                    onHapticFeedbackChange = settingsViewModel::updateHapticFeedbackEnabled,
-                    onOcrSensitivityChange = settingsViewModel::updateHighOcrSensitivity,
-                    onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches,
-                    onReducedConfettiEffectsChange = settingsViewModel::updateReducedConfettiEffects,
-                    onGreenStockThresholdChange = settingsViewModel::updateGreenStockThreshold,
-                    onAmberStockThresholdChange = settingsViewModel::updateAmberStockThreshold
-                )
-                else -> SafetyZoneTab()
+            if (settingsLoading || isTabSwitchLoading) {
+                SettingsShimmerRows()
+            } else {
+                when (selectedTabIndex) {
+                    0 -> PersonalizationTab(
+                        settings = settingsState,
+                        onShopNameChange = settingsViewModel::updateShopName,
+                        onCurrencyChange = settingsViewModel::updateCurrencyCode,
+                        onDefaultCategoryChange = settingsViewModel::updateDefaultCategory
+                    )
+                    1 -> PerformanceTab(
+                        settings = settingsState,
+                        onHapticFeedbackChange = settingsViewModel::updateHapticFeedbackEnabled,
+                        onOcrSensitivityChange = settingsViewModel::updateHighOcrSensitivity,
+                        onAutoSaveBatchesChange = settingsViewModel::updateAutoSaveBatches,
+                        onReducedConfettiEffectsChange = settingsViewModel::updateReducedConfettiEffects,
+                        onGreenStockThresholdChange = settingsViewModel::updateGreenStockThreshold,
+                        onAmberStockThresholdChange = settingsViewModel::updateAmberStockThreshold
+                    )
+                    else -> SafetyZoneTab()
+                }
             }
         }
     }
@@ -1637,11 +1662,13 @@ fun CollectionScreen(
 ) {
     val items by collectionViewModel.items.collectAsState()
     val pendingTodos by collectionViewModel.pendingTodos.collectAsState()
+    val isLoading by collectionViewModel.isLoading.collectAsState()
     val settingsViewModel: SettingsViewModel = viewModel()
     val settingsState by settingsViewModel.uiState.collectAsState()
     var selectedCategory by rememberSaveable { mutableStateOf("All") }
     var selectedItem by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
     var isEditing by rememberSaveable { mutableStateOf(false) }
+    var isCategorySwitchLoading by rememberSaveable { mutableStateOf(false) }
     var itemPendingDelete by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
     val categories = remember(items) { listOf("All") + items.map { it.category }.distinct().sorted() }
     val filteredItems = remember(items, selectedCategory) {
@@ -1653,6 +1680,11 @@ fun CollectionScreen(
             .split(",")
             .mapNotNull { it.trim().toIntOrNull() }
         ids.mapNotNull { id -> items.firstOrNull { it.id == id } }
+    }
+    LaunchedEffect(selectedCategory) {
+        isCategorySwitchLoading = true
+        delay(160)
+        isCategorySwitchLoading = false
     }
     Scaffold(
         topBar = { CenterAlignedTopAppBar(title = { Text("Collection") }) },
@@ -1700,7 +1732,11 @@ fun CollectionScreen(
                 }
             }
 
-            if (filteredItems.isEmpty()) {
+            if (isLoading || isCategorySwitchLoading) {
+                item {
+                    CollectionShimmerGrid()
+                }
+            } else if (filteredItems.isEmpty()) {
                 item {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Text("No items in this collection.", modifier = Modifier.padding(16.dp))
@@ -1717,7 +1753,6 @@ fun CollectionScreen(
                                     selectedItem = item
                                     isEditing = false
                                 },
-                                onDeleteClick = { itemPendingDelete = item },
                                 greenThreshold = settingsState.greenStockThreshold,
                                 amberThreshold = settingsState.amberStockThreshold
                             )
@@ -1751,7 +1786,8 @@ fun CollectionScreen(
                 onGalleryPick = { updatedPath ->
                     selectedItem = item.copy(imagePath = updatedPath)
                     collectionViewModel.updateItem(item.copy(imagePath = updatedPath))
-                }
+                },
+                onDelete = { itemPendingDelete = item }
             )
         }
 
@@ -1821,7 +1857,6 @@ private fun CollectionGridCard(
     item: ClothingItem,
     modifier: Modifier,
     onClick: () -> Unit,
-    onDeleteClick: () -> Unit,
     greenThreshold: Int,
     amberThreshold: Int
 ) {
@@ -1854,21 +1889,6 @@ private fun CollectionGridCard(
                         .clip(CircleShape)
                         .background(stockColor)
                 )
-                IconButton(
-                    onClick = onDeleteClick,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(6.dp)
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f))
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "Delete item",
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
             }
             Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(item.category, style = MaterialTheme.typography.labelSmall)
@@ -1884,7 +1904,8 @@ private fun CollectionDetailDialog(
     onDismiss: () -> Unit,
     onSave: (ClothingItem) -> Unit,
     onRetake: (String) -> Unit,
-    onGalleryPick: (String) -> Unit
+    onGalleryPick: (String) -> Unit,
+    onDelete: () -> Unit
 ) {
     val context = LocalContext.current
     var name by rememberSaveable(item.id) { mutableStateOf(item.name) }
@@ -1931,6 +1952,13 @@ private fun CollectionDetailDialog(
                         Text("Qty: ${item.quantity}   Price: ${item.price}")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = onEditToggle) { Icon(Icons.Filled.Edit, contentDescription = null); Text("Edit") }
+                            Button(
+                                onClick = onDelete,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError
+                                )
+                            ) { Icon(Icons.Filled.Delete, contentDescription = null); Text("Delete") }
                             TextButton(onClick = onDismiss) { Text("Close") }
                         }
                     }
