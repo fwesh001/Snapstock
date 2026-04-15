@@ -3,38 +3,30 @@ package com.example.snapstock.utils
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Color
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import org.tensorflow.lite.support.image.TensorImage
-import org.tensorflow.lite.task.core.BaseOptions
-import org.tensorflow.lite.task.vision.core.RunningMode
-import org.tensorflow.lite.task.vision.embedder.ImageEmbedder
 
 object DualEngineSignatureExtractor {
-    private const val MODEL_ASSET_PATH = "models/mobilenet_v2_1.0_224.tflite"
-
-    @Volatile
-    private var embedder: ImageEmbedder? = null
-
-    private val embedderLock = Any()
-
     suspend fun extractFromImagePath(context: Context, imagePath: String): DualEngineSignature? = withContext(Dispatchers.Default) {
         val bitmap = BitmapFactory.decodeFile(imagePath) ?: return@withContext null
         extractFromBitmap(context, bitmap)
     }
 
+    @Suppress("UNUSED_PARAMETER")
     suspend fun extractFromBitmap(context: Context, bitmap: Bitmap): DualEngineSignature = coroutineScope {
         val ocrDeferred = async(Dispatchers.Default) {
             OcrExtractor.extractTextBundle(bitmap)
         }
         val embeddingDeferred = async(Dispatchers.Default) {
-            extractEmbedding(context, bitmap)
+            buildVisualEmbedding(bitmap)
         }
 
         val ocrBundle = ocrDeferred.await()
         val embedding = embeddingDeferred.await()
+
         DualEngineSignature(
             embedding = embedding,
             ocrText = ocrBundle.fullText,
@@ -43,32 +35,35 @@ object DualEngineSignatureExtractor {
         )
     }
 
-    private fun extractEmbedding(context: Context, bitmap: Bitmap): FloatArray? {
-        val imageEmbedder = getOrCreateEmbedder(context) ?: return null
-        return runCatching {
-            val tensorImage = TensorImage.fromBitmap(bitmap)
-            val result = imageEmbedder.embed(tensorImage)
-            result.embeddingResult().embeddings().firstOrNull()?.featureVector()
-        }.getOrNull()
+    private fun buildVisualEmbedding(bitmap: Bitmap): FloatArray {
+        val signature = ImageMatcher.buildSignature(bitmap)
+        val color = signature.dominantColor
+        val features = FloatArray(18)
+
+        features[0] = Color.red(color) / 255f
+        features[1] = Color.green(color) / 255f
+        features[2] = Color.blue(color) / 255f
+        features[3] = ((features[0] + features[1] + features[2]) / 3f)
+
+        fillHashFeatures(features, 4, signature.averageHash)
+        fillHashFeatures(features, 12, signature.perceptualHash)
+
+        normalize(features)
+        return features
     }
 
-    private fun getOrCreateEmbedder(context: Context): ImageEmbedder? {
-        embedder?.let { return it }
-        synchronized(embedderLock) {
-            embedder?.let { return it }
-            val created = runCatching {
-                val options = ImageEmbedder.ImageEmbedderOptions.builder()
-                    .setBaseOptions(
-                        BaseOptions.builder()
-                            .setNumThreads(2)
-                            .build()
-                    )
-                    .setRunningMode(RunningMode.IMAGE)
-                    .build()
-                ImageEmbedder.createFromFileAndOptions(context, MODEL_ASSET_PATH, options)
-            }.getOrNull()
-            embedder = created
-            return created
+    private fun fillHashFeatures(target: FloatArray, offset: Int, hash: Long) {
+        for (bucket in 0 until 8) {
+            val chunk = ((hash ushr (bucket * 8)) and 0xFFL).toInt()
+            target[offset + bucket] = Integer.bitCount(chunk) / 8f
+        }
+    }
+
+    private fun normalize(values: FloatArray) {
+        val magnitude = kotlin.math.sqrt(values.sumOf { value -> (value * value).toDouble() })
+        if (magnitude == 0.0) return
+        for (index in values.indices) {
+            values[index] = (values[index] / magnitude.toFloat())
         }
     }
 }
