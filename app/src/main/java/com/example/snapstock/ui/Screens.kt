@@ -141,6 +141,7 @@ fun DashboardScreen(
     onSearchClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onCollectionClick: () -> Unit,
+    onTodoClick: () -> Unit,
     onBatchCaptureClick: () -> Unit,
     dashboardViewModel: DashboardViewModel = viewModel(),
     settingsViewModel: SettingsViewModel = viewModel()
@@ -223,7 +224,7 @@ fun DashboardScreen(
                     TodoReminderCard(
                         todo = uiState.pendingTodos.first(),
                         items = uiState.items,
-                        onContinue = onCollectionClick
+                        onContinue = onTodoClick
                     )
                 }
             }
@@ -1596,21 +1597,21 @@ private fun SnapStockConfetti(
         ),
         label = "confettiProgress"
     )
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+    val brandGreen = Color(0xFF2E7D32)
+    val brandAmber = Color(0xFFFFB300)
     val accentColor = InfoBlue
 
     val particles = remember(
-        primaryColor,
-        onPrimaryColor,
+        brandGreen,
+        brandAmber,
         accentColor,
         reducedEffects
     ) {
         val palette = listOf(
-            primaryColor,
-            onPrimaryColor,
+            brandGreen,
+            brandAmber,
             accentColor,
-            onPrimaryColor
+            brandGreen
         )
         val particleCount = if (reducedEffects) 24 else 56
         List(particleCount) { index ->
@@ -1658,6 +1659,7 @@ fun CollectionScreen(
     onHomeClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onTodoClick: () -> Unit,
     collectionViewModel: CollectionViewModel = viewModel()
 ) {
     val items by collectionViewModel.items.collectAsState()
@@ -1707,6 +1709,13 @@ fun CollectionScreen(
         ) {
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                    item {
+                        FilterChipLike(
+                            label = "To-Do",
+                            selected = false,
+                            onClick = onTodoClick
+                        )
+                    }
                     items(categories) { category ->
                         FilterChipLike(
                             label = category,
@@ -1722,12 +1731,7 @@ fun CollectionScreen(
                     TodoReminderCard(
                         todo = firstPendingTodo,
                         items = items,
-                        onContinue = {
-                            firstPendingTodoItems.firstOrNull()?.let { first ->
-                                selectedItem = first
-                                isEditing = false
-                            }
-                        }
+                        onContinue = onTodoClick
                     )
                 }
             }
@@ -1828,6 +1832,282 @@ fun CollectionScreen(
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TodoListScreen(
+    onHomeClick: () -> Unit,
+    onCollectionClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    todoViewModel: TodoViewModel = viewModel()
+) {
+    val todoItems by todoViewModel.todoItems.collectAsState()
+    val isLoading by todoViewModel.isLoading.collectAsState()
+    var selectedItem by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
+    var isEditing by rememberSaveable { mutableStateOf(false) }
+    var itemPendingDelete by rememberSaveable { mutableStateOf<ClothingItem?>(null) }
+
+    Scaffold(
+        topBar = { CenterAlignedTopAppBar(title = { Text("To-Do") }) },
+        bottomBar = {
+            AppBottomNavigationBar(
+                selectedNavItem = 1,
+                onHomeClick = onHomeClick,
+                onCollectionClick = onCollectionClick,
+                onSettingsClick = onSettingsClick
+            )
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(vertical = 12.dp)
+        ) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("Items needing details", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = "${todoItems.size} items incomplete",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            if (isLoading) {
+                item {
+                    CollectionShimmerGrid()
+                }
+            } else if (todoItems.isEmpty()) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "No pending To-Do items.",
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+            } else {
+                items(todoItems.chunked(2)) { rowItems ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                        rowItems.forEach { model ->
+                            TodoGridCard(
+                                model = model,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    selectedItem = model.item
+                                    isEditing = false
+                                },
+                                onMarkComplete = {
+                                    if (isItemCompleteForTodo(model.item)) {
+                                        todoViewModel.markItemComplete(model.item.id)
+                                        if (selectedItem?.id == model.item.id) {
+                                            selectedItem = null
+                                            isEditing = false
+                                        }
+                                    } else {
+                                        selectedItem = model.item
+                                        isEditing = true
+                                    }
+                                },
+                                onDelete = {
+                                    itemPendingDelete = model.item
+                                }
+                            )
+                        }
+                        if (rowItems.size == 1) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+
+        selectedItem?.let { item ->
+            CollectionDetailDialog(
+                item = item,
+                isEditing = isEditing,
+                onEditToggle = { isEditing = !isEditing },
+                onDismiss = {
+                    selectedItem = null
+                    isEditing = false
+                },
+                onSave = { updatedItem ->
+                    todoViewModel.updateItem(updatedItem)
+                    selectedItem = updatedItem
+                    isEditing = false
+                    if (isItemCompleteForTodo(updatedItem)) {
+                        todoViewModel.markItemComplete(updatedItem.id)
+                        selectedItem = null
+                    }
+                },
+                onRetake = { updatedPath ->
+                    selectedItem = item.copy(imagePath = updatedPath)
+                    todoViewModel.updateItem(item.copy(imagePath = updatedPath))
+                },
+                onGalleryPick = { updatedPath ->
+                    selectedItem = item.copy(imagePath = updatedPath)
+                    todoViewModel.updateItem(item.copy(imagePath = updatedPath))
+                },
+                onDelete = { itemPendingDelete = item }
+            )
+        }
+
+        itemPendingDelete?.let { item ->
+            AlertDialog(
+                onDismissRequest = { itemPendingDelete = null },
+                title = { Text("Delete item?") },
+                text = { Text("Are you sure you want to delete this item?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            todoViewModel.deleteItem(item)
+                            if (selectedItem?.id == item.id) {
+                                selectedItem = null
+                                isEditing = false
+                            }
+                            itemPendingDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError
+                        )
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = { itemPendingDelete = null },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun TodoGridCard(
+    model: TodoItemCardModel,
+    modifier: Modifier,
+    onClick: () -> Unit,
+    onMarkComplete: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val item = model.item
+    val missing = remember(item.id, item.name, item.price, item.quantity, item.category) {
+        missingFieldsForTodo(item)
+    }
+
+    Card(
+        modifier = modifier,
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(8.dp)) {
+            Box {
+                ItemImageThumbnail(
+                    imagePath = item.imagePath,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(152.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                )
+
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(
+                        onClick = onMarkComplete,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = "Mark complete",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(30.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = "Delete item",
+                            tint = MaterialTheme.colorScheme.onError,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (missing.isEmpty()) {
+                Text(
+                    text = "Ready to complete",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                Text(
+                    text = "Missing: ${missing.joinToString(", ")}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+private fun missingFieldsForTodo(item: ClothingItem): List<String> {
+    val missing = mutableListOf<String>()
+    if (item.name.trim().isBlank() || item.name.startsWith("Pending Item")) {
+        missing += "Name"
+    }
+    if (item.price <= 0.0) {
+        missing += "Price"
+    }
+    if (item.quantity <= 0) {
+        missing += "Qty"
+    }
+    if (item.category.trim().isBlank()) {
+        missing += "Category"
+    }
+    return missing
+}
+
+private fun isItemCompleteForTodo(item: ClothingItem): Boolean {
+    return missingFieldsForTodo(item).isEmpty()
 }
 
 @Composable

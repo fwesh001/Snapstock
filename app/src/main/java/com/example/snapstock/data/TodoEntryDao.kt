@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -14,6 +15,9 @@ interface TodoEntryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTodoEntries(todoEntries: List<TodoEntry>): List<Long>
+
+    @Update
+    suspend fun updateTodoEntry(todoEntry: TodoEntry)
 
     @Query("SELECT * FROM todo_entries WHERE completed = 0 ORDER BY createdAt DESC")
     fun getPendingTodos(): Flow<List<TodoEntry>>

@@ -10,6 +10,7 @@ sealed class Route(val route: String) {
     object Splash : Route("splash")
     object Dashboard : Route("dashboard")
     object Collection : Route("collection")
+    object TodoList : Route("todo_list")
     object Search : Route("search")
     object SearchCamera : Route("search_camera")
     object Settings : Route("settings")
@@ -31,6 +32,12 @@ fun AppNavHost(navController: NavHostController) {
 
     val navigateToCollection = {
         navController.navigate(Route.Collection.route) {
+            launchSingleTop = true
+        }
+    }
+
+    val navigateToTodoList = {
+        navController.navigate(Route.TodoList.route) {
             launchSingleTop = true
         }
     }
@@ -63,6 +70,7 @@ fun AppNavHost(navController: NavHostController) {
                 onSearchClick = navigateToSearch,
                 onSettingsClick = navigateToSettings,
                 onCollectionClick = navigateToCollection,
+                onTodoClick = navigateToTodoList,
                 onBatchCaptureClick = {
                     batchEntryViewModel.startNewSession()
                     navController.navigate(Route.BatchCapture.route)
@@ -71,6 +79,14 @@ fun AppNavHost(navController: NavHostController) {
         }
         composable(Route.Collection.route) {
             CollectionScreen(
+                onHomeClick = navigateToDashboard,
+                onCollectionClick = navigateToCollection,
+                onSettingsClick = navigateToSettings,
+                onTodoClick = navigateToTodoList
+            )
+        }
+        composable(Route.TodoList.route) {
+            TodoListScreen(
                 onHomeClick = navigateToDashboard,
                 onCollectionClick = navigateToCollection,
                 onSettingsClick = navigateToSettings
