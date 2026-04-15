@@ -45,7 +45,7 @@ data class BatchEntryUiState(
 }
 
 sealed interface BatchSaveEvent {
-    data class Success(val savedCount: Int) : BatchSaveEvent
+    data class Success(val savedCount: Int, val todoCount: Int = 0) : BatchSaveEvent
     data class Error(val message: String) : BatchSaveEvent
 }
 
@@ -208,9 +208,7 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
                 val now = System.currentTimeMillis()
                 val appContext = getApplication<Application>().applicationContext
                 val entities = state.drafts.map { draft ->
-                    val signature = runCatching {
-                        DualEngineSignatureExtractor.extractFromImagePath(appContext, draft.imagePath)
-                    }.getOrNull()
+                    val signature = extractSignatureSafely(appContext, draft.imagePath)
 
                     val name = draft.name.trim().ifBlank { "Pending Item ${draft.localId}" }
                     val price = draft.priceInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
@@ -245,6 +243,61 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
                 nextLocalId = 1
                 _uiState.value = BatchEntryUiState()
                 _events.emit(BatchSaveEvent.Success(savedCount = entities.size))
+            } catch (_: Exception) {
+                _uiState.update { it.copy(isSaving = false) }
+                _events.emit(BatchSaveEvent.Error("Batch save failed. Please try again."))
+            }
+        }
+    }
+
+    fun saveBatchWithTodo() {
+        commitLastRemoval()
+        val state = _uiState.value
+        if (state.drafts.isEmpty()) {
+            viewModelScope.launch { _events.emit(BatchSaveEvent.Error("Capture at least one item first.")) }
+            return
+        }
+
+        _uiState.update { it.copy(isSaving = true) }
+
+        viewModelScope.launch {
+            try {
+                val now = System.currentTimeMillis()
+                val appContext = getApplication<Application>().applicationContext
+                val completeDrafts = state.drafts.filter(::isDraftComplete)
+                val incompleteDrafts = state.drafts.filterNot(::isDraftComplete)
+
+                val entities = buildList {
+                    completeDrafts.forEach { draft ->
+                        add(buildIndexedItem(appContext, draft, now))
+                    }
+                }
+
+                val insertedIds = if (entities.isNotEmpty()) {
+                    dao.insertItems(entities).map { it.toInt() }
+                } else {
+                    emptyList()
+                }
+
+                if (incompleteDrafts.isNotEmpty()) {
+                    todoDao.insertTodoEntry(
+                        TodoEntry(
+                            title = buildTodoTitle(incompleteDrafts),
+                            itemIdsCsv = insertedIds.joinToString(","),
+                            createdAt = now,
+                            completed = false
+                        )
+                    )
+                }
+
+                nextLocalId = 1
+                _uiState.value = BatchEntryUiState()
+                _events.emit(
+                    BatchSaveEvent.Success(
+                        savedCount = entities.size,
+                        todoCount = incompleteDrafts.size
+                    )
+                )
             } catch (_: Exception) {
                 _uiState.update { it.copy(isSaving = false) }
                 _events.emit(BatchSaveEvent.Error("Batch save failed. Please try again."))
@@ -296,5 +349,59 @@ class BatchEntryViewModel(application: Application) : AndroidViewModel(applicati
         val normalized = digitsOnly.trimStart('0')
         return normalized
     }
+
+    private fun isDraftComplete(draft: BatchDraft): Boolean {
+        return draft.name.trim().isNotBlank() &&
+            draft.category.trim().isNotBlank() &&
+            draft.priceInput.toDoubleOrNull()?.let { it > 0.0 } == true &&
+            draft.quantityInput.toIntOrNull()?.let { it > 0 } == true
+    }
+
+    private suspend fun buildIndexedItem(
+        appContext: Context,
+        draft: BatchDraft,
+        now: Long
+    ): ClothingItem {
+        val signature = extractSignatureSafely(appContext, draft.imagePath)
+
+        val name = draft.name.trim().ifBlank { "Pending Item ${draft.localId}" }
+        val price = draft.priceInput.toDoubleOrNull()?.takeIf { it > 0.0 } ?: 0.0
+        val quantity = draft.quantityInput.toIntOrNull()?.takeIf { it > 0 } ?: 1
+
+        return ClothingItem(
+            name = name,
+            price = price,
+            quantity = quantity,
+            category = draft.category,
+            imagePath = draft.imagePath,
+            patternHash = null,
+            visualEmbedding = SignatureCodec.encodeEmbedding(signature?.embedding),
+            ocrText = signature?.ocrText?.takeIf { it.isNotBlank() },
+            ocrTokens = SignatureCodec.encodeTokens(signature?.ocrTokens ?: emptySet()),
+            signatureVersion = signature?.signatureVersion ?: CURRENT_SIGNATURE_VERSION,
+            dateAdded = now
+        )
+    }
+
+    private fun buildTodoTitle(incompleteDrafts: List<BatchDraft>): String {
+        val summary = incompleteDrafts.joinToString(separator = ", ") { draft ->
+            val missingFields = buildList {
+                if (draft.name.trim().isBlank()) add("Name")
+                if (draft.category.trim().isBlank()) add("Category")
+                if (draft.priceInput.toDoubleOrNull()?.let { it > 0.0 } != true) add("Price")
+                if (draft.quantityInput.toIntOrNull()?.let { it > 0 } != true) add("Qty")
+            }
+            "Item ${draft.localId}: Missing ${missingFields.joinToString(", ")}"
+        }
+
+        return "Complete batch details — $summary"
+    }
+
+    private suspend fun extractSignatureSafely(context: Context, imagePath: String) =
+        try {
+            DualEngineSignatureExtractor.extractFromImagePath(context, imagePath)
+        } catch (_: Exception) {
+            null
+        }
 }
 
