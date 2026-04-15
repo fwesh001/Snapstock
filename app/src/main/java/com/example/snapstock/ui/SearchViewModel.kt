@@ -1,6 +1,7 @@
 package com.example.snapstock.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.snapstock.data.AppDatabase
@@ -108,7 +109,11 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         scannedImage,
         allItems
     ) { activeQuery, searchState, activeScannedImage, itemPool ->
-        val visualMatchResult = findTopVisualMatches(itemPool, activeScannedImage?.signature)
+        val visualMatchResult = findTopVisualMatches(
+            items = itemPool,
+            sourceSignature = activeScannedImage?.signature,
+            appContext = getApplication<Application>().applicationContext
+        )
         val topMatches = visualMatchResult.matches
         val topMatchIds = topMatches.map { it.item.id }.toSet()
 
@@ -145,20 +150,23 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun findTopVisualMatches(
         items: List<ClothingItem>,
-        sourceSignature: DualEngineSignature?
+        sourceSignature: DualEngineSignature?,
+        appContext: Context
     ): VisualMatchResult {
         if (sourceSignature == null) return VisualMatchResult()
 
         return withContext(Dispatchers.Default) {
             val candidates = items.mapNotNull { item ->
-                val signature = resolveSignature(item) ?: return@mapNotNull null
+                val signature = resolveSignature(appContext, item) ?: return@mapNotNull null
                 val visualScore = SignatureCodec.cosineSimilarity(sourceSignature.embedding, signature.embedding)
                 val textScore = SignatureCodec.tokenSimilarity(sourceSignature.ocrTokens, signature.ocrTokens)
                 val combinedScore = (visualScore * visualWeight) + (textScore * textWeight)
                 val qualifies = combinedScore >= combinedThreshold ||
                     visualScore >= singleEngineThreshold ||
                     textScore >= singleEngineThreshold
-                if (!qualifies) return@mapNotNull null
+                if (!qualifies && combinedScore < 0.20f && visualScore < 0.30f && textScore < 0.30f) {
+                    return@mapNotNull null
+                }
 
                 VisualMatchCandidate(
                     item = item,
@@ -170,7 +178,17 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             val sortedCandidates = candidates.sortedByDescending { it.combinedScore }
-            val matches = sortedCandidates.take(8)
+            val shortlisted = if (sortedCandidates.any { candidate ->
+                    candidate.combinedScore >= combinedThreshold ||
+                        candidate.visualScore >= singleEngineThreshold ||
+                        candidate.textScore >= singleEngineThreshold
+                }) {
+                sortedCandidates
+            } else {
+                sortedCandidates.take(1)
+            }
+
+            val matches = shortlisted.take(8)
                 .map {
                     RankedMatch(
                         item = it.item,
@@ -188,19 +206,27 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun resolveSignature(item: ClothingItem): DualEngineSignature? {
+    private suspend fun resolveSignature(appContext: Context, item: ClothingItem): DualEngineSignature? {
         val embedded = SignatureCodec.decodeEmbedding(item.visualEmbedding)
         val tokenSet = SignatureCodec.decodeTokens(item.ocrTokens)
-        if (embedded != null || tokenSet.isNotEmpty() || !item.ocrText.isNullOrBlank()) {
+        if (embedded != null) {
             return DualEngineSignature(
                 embedding = embedded,
-                ocrText = item.ocrText.orEmpty(),
-                ocrTokens = tokenSet,
+                ocrText = item.ocrText?.takeIf { it.isNotBlank() } ?: "${item.name} ${item.category}",
+                ocrTokens = tokenSet.ifEmpty { OcrExtractor.normalizeTokens("${item.name} ${item.category}") },
                 signatureVersion = item.signatureVersion
             )
         }
 
-        val fallbackTokens = OcrExtractor.normalizeTokens(item.name + " " + item.category)
+        val rebuilt = runCatching {
+            DualEngineSignatureExtractor.extractFromImagePath(appContext, item.imagePath)
+        }.getOrNull()
+
+        if (rebuilt != null) {
+            return rebuilt
+        }
+
+        val fallbackTokens = tokenSet.ifEmpty { OcrExtractor.normalizeTokens(item.name + " " + item.category) }
         return DualEngineSignature(
             embedding = null,
             ocrText = "${item.name} ${item.category}",
