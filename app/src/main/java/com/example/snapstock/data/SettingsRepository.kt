@@ -37,6 +37,7 @@ data class AppSettings(
     val highOcrSensitivity: Boolean = false,
     val autoSaveBatches: Boolean = false,
     val reducedConfettiEffects: Boolean = false
+    val reducedConfettiEffects: Boolean = false
 )
 
 class SettingsRepository(private val context: Context) {
@@ -60,6 +61,7 @@ class SettingsRepository(private val context: Context) {
                 hapticFeedbackEnabled = preferences[KEY_HAPTIC_FEEDBACK] ?: true,
                 highOcrSensitivity = preferences[KEY_HIGH_OCR_SENSITIVITY] ?: false,
                 autoSaveBatches = preferences[KEY_AUTO_SAVE_BATCHES] ?: false,
+                reducedConfettiEffects = preferences[KEY_REDUCED_CONFETTI_EFFECTS] ?: false
                 reducedConfettiEffects = preferences[KEY_REDUCED_CONFETTI_EFFECTS] ?: false
             )
         }
@@ -131,6 +133,12 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateReducedConfettiEffects(enabled: Boolean) {
+        context.settingsDataStore.edit { preferences ->
+            preferences[KEY_REDUCED_CONFETTI_EFFECTS] = enabled
+        }
+    }
+
     suspend fun resetSettings() {
         context.settingsDataStore.edit { preferences ->
             preferences.clear()
@@ -148,6 +156,7 @@ class SettingsRepository(private val context: Context) {
         private val KEY_HAPTIC_FEEDBACK = booleanPreferencesKey("haptic_feedback_enabled")
         private val KEY_HIGH_OCR_SENSITIVITY = booleanPreferencesKey("high_ocr_sensitivity")
         private val KEY_AUTO_SAVE_BATCHES = booleanPreferencesKey("auto_save_batches")
+        private val KEY_REDUCED_CONFETTI_EFFECTS = booleanPreferencesKey("reduced_confetti_effects")
         private val KEY_REDUCED_CONFETTI_EFFECTS = booleanPreferencesKey("reduced_confetti_effects")
 
         val PRESET_CATEGORIES = listOf("Shirts", "Pants", "Shoes", "Accessories", "Outerwear", "Dresses")
