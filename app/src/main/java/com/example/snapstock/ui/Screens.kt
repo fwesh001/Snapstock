@@ -119,8 +119,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.snapstock.data.AppSettings
 import com.example.snapstock.data.ClothingItem
-import com.example.snapstock.utils.ImageMatcher
-import com.example.snapstock.utils.ImageSignature
+import com.example.snapstock.ui.MatchBadge
+import com.example.snapstock.ui.RankedMatch
+import com.example.snapstock.utils.ImageSharpness
 import com.example.snapstock.utils.OcrExtractor
 import java.io.File
 import java.io.FileOutputStream
@@ -131,12 +132,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
 import nl.dionsegijn.konfetti.compose.KonfettiView
 import nl.dionsegijn.konfetti.core.Angle
 import nl.dionsegijn.konfetti.core.Party
 import nl.dionsegijn.konfetti.core.Position
 import nl.dionsegijn.konfetti.core.emitter.Emitter
 import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -526,7 +529,8 @@ fun SearchScreen(
     onHomeClick: () -> Unit,
     onCollectionClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    onCameraClick: () -> Unit = {}
+    onCameraClick: () -> Unit = {},
+    onCreateMysteryItem: () -> Unit = {}
 ) {
     val collectionViewModel: CollectionViewModel = viewModel()
     val uiState by searchViewModel.uiState.collectAsState()
@@ -582,10 +586,10 @@ fun SearchScreen(
             if (uiState.scannedImage != null && uiState.topMatches.isNotEmpty()) {
                 item {
                     BestMatchHeroCard(
-                        item = uiState.topMatches.first(),
+                        match = uiState.topMatches.first(),
                         matchCount = uiState.topMatches.size,
                         onClick = {
-                            selectedItem = uiState.topMatches.first()
+                            selectedItem = uiState.topMatches.first().item
                             isEditing = false
                         }
                     )
@@ -599,9 +603,9 @@ fun SearchScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                    items(uiState.topMatches.drop(1), key = { it.id }) { item ->
-                        SearchResultCard(item = item, onClick = {
-                            selectedItem = item
+                    items(uiState.topMatches.drop(1), key = { it.item.id }) { match ->
+                        SearchResultCard(item = match.item, badge = match.badge, onClick = {
+                            selectedItem = match.item
                             isEditing = false
                         })
                     }
@@ -610,7 +614,7 @@ fun SearchScreen(
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -618,15 +622,24 @@ fun SearchScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "No confident match",
+                                text = "That pattern is a mystery!",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onErrorContainer
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Text(
-                                text = "Try a clearer photo or search by name",
+                                text = "Create New Item?",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f)
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.78f)
+                            )
+                            Button(
+                                onClick = onCreateMysteryItem,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiary,
+                                    contentColor = MaterialTheme.colorScheme.onTertiary
+                                )
+                            ) {
+                                Text("Create New Item")
                             )
                         }
                     }
@@ -837,30 +850,40 @@ fun SearchCameraScreen(
                                 return@IconButton
                             }
 
-                            val photoFile = createBatchImageFile(context)
-                            val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-                            isCapturing = true
-                            cameraController.takePicture(
-                                outputOptions,
-                                ContextCompat.getMainExecutor(context),
-                                object : ImageCapture.OnImageSavedCallback {
-                                    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                                        scope.launch {
-                                            searchViewModel.onImageScanned(photoFile.absolutePath)
-                                            delay(180)
-                                            isCapturing = false
-                                            onDoneClick()
+                            scope.launch {
+                                isCapturing = true
+                                val burstFiles = mutableListOf<File>()
+                                try {
+                                    val start = System.currentTimeMillis()
+                                    while (burstFiles.size < 6 && (System.currentTimeMillis() - start) < 2_000L) {
+                                        val captured = captureSingleFrame(cameraController, context)
+                                        if (captured != null) {
+                                            burstFiles += captured
                                         }
+                                        if (burstFiles.size >= 5 && (System.currentTimeMillis() - start) >= 1_500L) {
+                                            break
+                                        }
+                                        delay(120)
                                     }
 
-                                    override fun onError(exception: ImageCaptureException) {
-                                        isCapturing = false
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("Capture failed. Please try again.")
+                                    val golden = selectGoldenFrame(burstFiles)
+                                    if (golden == null) {
+                                        snackbarHostState.showSnackbar("Capture failed. Please try again.")
+                                    } else {
+                                        val processed = searchViewModel.onImageScanned(golden.absolutePath)
+                                        if (processed) {
+                                            onDoneClick()
+                                        } else {
+                                            snackbarHostState.showSnackbar("Scan failed. Please try again.")
                                         }
+                                        burstFiles
+                                            .filter { it.absolutePath != golden.absolutePath }
+                                            .forEach { file -> runCatching { file.delete() } }
                                     }
+                                } finally {
+                                    isCapturing = false
                                 }
-                            )
+                            }
                         },
                         modifier = Modifier
                             .size(92.dp)
@@ -1523,8 +1546,8 @@ private fun SnapStockConfetti(
             angle = Angle.TOP,
             spread = 360,
             colors = listOf(
-                Color(0xFF2E7D32).toArgb(),
-                Color(0xFFFFFFFF).toArgb()
+                0xFF2E7D32.toInt(),
+                0xFFFFFFFF.toInt()
             ),
             emitter = Emitter(duration = 1500, TimeUnit.MILLISECONDS).max(140),
             position = Position.Relative(0.5, 1.0)
@@ -2132,10 +2155,11 @@ private fun ScannerLaserOverlay(
 
 @Composable
 private fun BestMatchHeroCard(
-    item: ClothingItem,
+    match: RankedMatch,
     matchCount: Int,
     onClick: () -> Unit
 ) {
+    val item = match.item
     Card(
         modifier = Modifier.fillMaxWidth(),
         onClick = onClick,
@@ -2202,6 +2226,25 @@ private fun BestMatchHeroCard(
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                    val badgeLabel = when (match.badge) {
+                        MatchBadge.PatternMatch -> "Pattern Match"
+                        MatchBadge.TagMatch -> "Tag Match"
+                        MatchBadge.DualMatch -> null
+                    }
+                    if (badgeLabel != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            Text(
+                                text = badgeLabel,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -2260,7 +2303,7 @@ private fun SearchNoMatchCard(query: String) {
 }
 
 @Composable
-private fun SearchResultCard(item: ClothingItem, onClick: () -> Unit) {
+private fun SearchResultCard(item: ClothingItem, badge: MatchBadge? = null, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(
             modifier = Modifier
@@ -2278,6 +2321,20 @@ private fun SearchResultCard(item: ClothingItem, onClick: () -> Unit) {
                 Text(text = item.name, style = MaterialTheme.typography.titleMedium)
                 Text(text = "Category: ${item.category}")
                 Text(text = "Qty: ${item.quantity}   Price: ${item.price}")
+                if (badge != null) {
+                    val badgeLabel = when (badge) {
+                        MatchBadge.PatternMatch -> "Pattern Match"
+                        MatchBadge.TagMatch -> "Tag Match"
+                        MatchBadge.DualMatch -> null
+                    }
+                    if (badgeLabel != null) {
+                        Text(
+                            text = badgeLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
     }
@@ -2634,6 +2691,48 @@ private fun createBatchImageFile(context: Context): File {
         imageDir.mkdirs()
     }
     return File(imageDir, "snap_${System.currentTimeMillis()}.jpg")
+}
+
+private suspend fun captureSingleFrame(
+    cameraController: LifecycleCameraController,
+    context: Context
+): File? = suspendCancellableCoroutine { continuation ->
+    val photoFile = createBatchImageFile(context)
+    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+    cameraController.takePicture(
+        outputOptions,
+        ContextCompat.getMainExecutor(context),
+        object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                if (continuation.isActive) {
+                    continuation.resume(photoFile)
+                }
+            }
+
+            override fun onError(exception: ImageCaptureException) {
+                runCatching { photoFile.delete() }
+                if (continuation.isActive) {
+                    continuation.resume(null)
+                }
+            }
+        }
+    )
+}
+
+private suspend fun selectGoldenFrame(frames: List<File>): File? = withContext(Dispatchers.Default) {
+    var bestFile: File? = null
+    var bestScore = Double.NEGATIVE_INFINITY
+
+    frames.forEach { file ->
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: return@forEach
+        val sharpness = ImageSharpness.score(bitmap)
+        if (sharpness > bestScore) {
+            bestScore = sharpness
+            bestFile = file
+        }
+    }
+
+    bestFile
 }
 
 private data class DraftOcrHints(
